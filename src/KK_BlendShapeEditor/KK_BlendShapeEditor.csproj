@@ -22,6 +22,7 @@
         <DefineConstants>DEBUG;TRACE;KK</DefineConstants>
         <ErrorReport>prompt</ErrorReport>
         <WarningLevel>4</WarningLevel>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
     <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
         <PlatformTarget>AnyCPU</PlatformTarget>
@@ -31,6 +32,7 @@
         <DefineConstants>TRACE;KK</DefineConstants>
         <ErrorReport>prompt</ErrorReport>
         <WarningLevel>4</WarningLevel>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
     <ItemGroup>
       <None Include="packages.config" />
@@ -59,6 +61,15 @@
       </Reference>
       <Reference Include="KKAPI, Version=1.46.1.0, Culture=neutral, processorArchitecture=MSIL">
         <HintPath>..\packages\IllusionModdingAPI.KKAPI.1.46.1\lib\net35\KKAPI.dll</HintPath>
+      </Reference>
+      <Reference Include="KKPE">
+        <HintPath>..\..\AdditionalDependencies\KKPE-publicized.dll</HintPath>
+      </Reference>
+      <Reference Include="KK_BlendshapeCreator">
+        <HintPath>..\..\AdditionalDependencies\KK_BlendshapeCreator-publicized.dll</HintPath>
+      </Reference>
+      <Reference Include="KK_Fix_MakerOptimizations">
+        <HintPath>..\..\AdditionalDependencies\KK_Fix_MakerOptimizations-publicized.dll</HintPath>
       </Reference>
       <Reference Include="System" />
       <Reference Include="System.Core" />

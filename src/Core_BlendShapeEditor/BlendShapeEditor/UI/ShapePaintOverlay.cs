@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
+using HSPE;
+using KKAPI.Studio;
+using Studio;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
-namespace KKShapeEditor
+namespace BlendShapeEditor
 {
 	[DefaultExecutionOrder(32001)]
 	public class ShapePaintOverlay : MonoBehaviour
@@ -55,7 +58,7 @@ namespace KKShapeEditor
 
 		private void Update()
 		{
-			if (ShapeEditorPlugin.StudioToggleKey.Value.IsDown())
+			if (BlendShapeEditorPlugin.StudioToggleKey.Value.IsDown())
 			{
 				Window?.Toggle();
 				if (Window != null && Window.Visible)
@@ -101,17 +104,6 @@ namespace KKShapeEditor
 				Window.DeferLayerRemove = -1;
 				DoLayerRemove(layerRemoveIdx);
 			}
-			if (Window.DeferSubdivide)
-			{
-				Window.DeferSubdivide = false;
-				DoSubdivide();
-				_undoStack?.Clear();
-			}
-			if (Window.DeferRestore)
-			{
-				Window.DeferRestore = false;
-				DoRestore();
-			}
 			if (Window.DeferLayerMoveUp >= 0)
 			{
 				int layerMoveUpIdx = Window.DeferLayerMoveUp;
@@ -141,21 +133,6 @@ namespace KKShapeEditor
 				if (_undoStack != null && Window.ActiveDeformData != null && weightUndoLayer < Window.ActiveDeformData.Layers.Count)
 					_undoStack.Push(new LayerWeightUndoEntry(Window.ActiveDeformData.Layers[weightUndoLayer], Window.WeightUndoBefore, Window.WeightUndoAfter));
 			}
-			if (Window.DeferFaceSelectAll)
-			{
-				Window.DeferFaceSelectAll = false;
-				Window.FaceSelect?.SelectAll();
-			}
-			if (Window.DeferFaceSelectNone)
-			{
-				Window.DeferFaceSelectNone = false;
-				Window.FaceSelect?.ClearSelection();
-			}
-			if (Window.DeferFaceSelectInvert)
-			{
-				Window.DeferFaceSelectInvert = false;
-				Window.FaceSelect?.InvertSelection();
-			}
 			if (Window.DeferSetSymmetryCenter)
 			{
 				Window.DeferSetSymmetryCenter = false;
@@ -178,25 +155,10 @@ namespace KKShapeEditor
 				_symmetryCenter = 0f;
 				_symmetryCenterSet = false;
 			}
-			if (Window.DeferRemapWeights)
+			if (Window.DeferBake)
 			{
-				Window.DeferRemapWeights = false;
-				DoRemapWeights();
-			}
-			if (Window.DeferRestoreWeights)
-			{
-				Window.DeferRestoreWeights = false;
-				DoRestoreWeights();
-			}
-			if (Window.DeferExport)
-			{
-				Window.DeferExport = false;
-				DoExportDeform();
-			}
-			if (Window.DeferImport)
-			{
-				Window.DeferImport = false;
-				DoImportDeform();
+				Window.DeferBake = false;
+				DoBake();
 			}
 		}
 
@@ -217,36 +179,37 @@ namespace KKShapeEditor
 				deformer.StudioMode = studioMode;
 				deformer.DeformData = deformData;
 			}
-			SkinnedMeshRenderer smr = renderer as SkinnedMeshRenderer;
-			if (smr)
+			switch (renderer)
 			{
-				deformer.Init(smr);
-			}
-			else
-			{
-				MeshFilter mf = renderer.GetComponent<MeshFilter>();
-				MeshRenderer mr = renderer as MeshRenderer;
-				if (mf && mr)
-					deformer.Init(mf, mr);
+				case SkinnedMeshRenderer smr:
+					deformer.Init(smr);
+					break;
+				case MeshRenderer mr:
+				{
+					MeshFilter mf = renderer.GetComponent<MeshFilter>();
+					if (mf && mr) deformer.Init(mf, mr);
+					break;
+				}
 			}
 			SetTarget(renderer);
 			Window.ActiveDeformData = deformData;
 			Window.SetEditMode(true);
 			if (SelectionTool != null)
 			{
-				SkinnedMeshRenderer smr2 = renderer as SkinnedMeshRenderer;
-				if (smr2)
+				switch (renderer)
 				{
-					SelectionTool.SetTarget(smr2);
-				}
-				else
-				{
-					MeshFilter mf2 = renderer.GetComponent<MeshFilter>();
-					if (mf2)
-						SelectionTool.SetTarget(mf2);
+					case SkinnedMeshRenderer smr:
+						SelectionTool.SetTarget(smr);
+						break;
+					case MeshRenderer mr:
+					{
+						MeshFilter mf = mr.GetComponent<MeshFilter>();
+						if (mf) SelectionTool.SetTarget(mf);
+						break;
+					}
 				}
 			}
-			_undoStack = new UndoStack(ShapeEditorPlugin.UndoMaxSteps.Value);
+			_undoStack = new UndoStack(BlendShapeEditorPlugin.UndoMaxSteps.Value);
 			if (_moveTool == null)
 				_moveTool = new MoveTool();
 			if (_smoothTool == null)
@@ -258,16 +221,22 @@ namespace KKShapeEditor
 			_moveTool.Deformer = _deformer;
 			_gizmo.Deformer = _deformer;
 			Transform objectRoot = null;
-			ShapeEditorController charCtrl = renderer.GetComponentInParent<ShapeEditorController>();
-			if (charCtrl)
+			
+			switch (renderer.TryGetOwningController(out Object controller))
 			{
-				objectRoot = charCtrl.RootTransform;
-			}
-			else
-			{
-				ItemShapeController itemCtrl = renderer.GetComponentInParent<ItemShapeController>();
-				if (itemCtrl)
+				case true when controller is BlendShapeEditorCharaController charCtrl:
+					objectRoot = charCtrl.RootTransform;
+					break;
+				case true when controller is BlendShapeEditorItemController itemCtrl:
 					objectRoot = itemCtrl.RootTransform;
+					break;
+			}
+
+			if (!objectRoot)
+			{
+				// should not happen
+				BlendShapeEditorPlugin.Logger.LogError("ShapePaintOverlay.EnterEditMode() -> ObjectRoot is null");
+				return;
 			}
 			_gizmo.SetObjectRoot(objectRoot);
 			Mesh mesh = MeshHelper.GetMesh(renderer);
@@ -284,6 +253,8 @@ namespace KKShapeEditor
 			_gizmo?.SetObjectRoot(null);
 			DeactivateHighlight();
 			SelectionTool?.CleanupCollider();
+			if (_deformer)
+				DestroyImmediate(_deformer);
 			SetTarget(null);
 			Window.ActiveDeformData = null;
 			Window.SetEditMode(false);
@@ -303,121 +274,56 @@ namespace KKShapeEditor
 			_isBrushing = false;
 		}
 
-		private void DoRemapWeights()
+		private void DoBake()
 		{
-			if (!_deformer || !_targetRenderer)
+			if (!_deformer || !(_targetRenderer is SkinnedMeshRenderer smr))
 				return;
-			if (Window.ActiveDeformData == null)
+			if (Window.ActiveDeformData == null || !Window.ActiveDeformData.HasLayers)
 				return;
-			SkinnedMeshRenderer smr = _targetRenderer as SkinnedMeshRenderer;
-			if (!smr)
+			string shapeName = Window.BakeShapeName;
+			if (string.IsNullOrEmpty(shapeName))
+				shapeName = "BSE_Shape";
+			int bsIndex = _deformer.BakeToBlendShape(shapeName, out Vector3[] deltaVerts, out Vector3[] deltaNormals);
+			if (bsIndex < 0)
 				return;
-			ShapeEditorController charCtrl = _targetRenderer.GetComponentInParent<ShapeEditorController>();
-			if (!charCtrl)
-				return;
-			SkinnedMeshRenderer bodySmr = charCtrl.GetBodySmr();
-			if (!bodySmr)
-				return;
-			Mesh bodyMesh = bodySmr.sharedMesh;
-			Mesh targetMesh = smr.sharedMesh;
-			if (!targetMesh)
-				return;
-			Vector3[] bindVerts = _deformer.BindVertices ?? targetMesh.vertices;
-			Vector3[] finalDelta = Window.ActiveDeformData.ComputeFinalDelta();
-			if (finalDelta == null || finalDelta.Length != bindVerts.Length)
-				return;
-			BoneWeight[] remapped = WeightRemapper.ComputeRemappedWeights(bindVerts, finalDelta, smr.bones, bodyMesh.vertices, bodyMesh.boneWeights, _deformer.OriginalBoneWeights, bodySmr.bones, bodyMesh.triangles);
-			if (remapped == null) return;
-			_deformer.RemappedBoneWeights = remapped;
-			Window.ActiveDeformData.WeightRemapped = true;
+			
+			smr.SetBlendShapeWeight(bsIndex, 100f);
+			
+			bool foundController = _deformer.TryGetOwningController(out Object controller);
+			string path;
+			switch (foundController)
+			{
+				case true when controller is BlendShapeEditorItemController itemCtrl: 
+					path = itemCtrl.RootTransform.GetPathToChild(smr.transform);
+					BlendShapeCreatorBridge.RegisterBlendShapeStudio(itemCtrl.ItemCtrlInfo, path, shapeName, deltaVerts, deltaNormals);
+					RefreshPoseController(itemCtrl.gameObject);
+					break;
+				case true when controller is BlendShapeEditorCharaController charCtrl:
+					path = charCtrl.RootTransform.GetPathToChild(smr.transform);
+					BlendShapeCreatorBridge.RegisterBlendShapeMaker(charCtrl.ChaControl, path, shapeName, deltaVerts, deltaNormals);
+					RefreshPoseController(charCtrl.gameObject);
+					break;
+				default:
+					BlendShapeEditorPlugin.Logger.LogError("Could not bake and register Blendshape");
+					BlendShapeEditorPlugin.Logger.LogError("ShapePaintOverlay.EnterBake() -> Controller is null");
+					return;
+			}
+
+			Window.IncrementBakeShapeName();
+			Window.ActiveDeformData.ClearLayers();
+			DoExitEditMode();
 		}
 
-		private void DoRestoreWeights()
+		private static void RefreshPoseController(GameObject poseControllerOwner)
 		{
-			if (!_deformer)
-				return;
-			_deformer.ClearRemappedWeights();
-			if (Window.ActiveDeformData != null)
-				Window.ActiveDeformData.WeightRemapped = false;
-		}
-
-		private void DoExportDeform()
-		{
-			if (Window.Renderers.Count == 0)
-				return;
-			int index = Mathf.Clamp(Window.SelectedRendererIndex, 0, Window.Renderers.Count - 1);
-			Renderer renderer = Window.Renderers[index];
-			if (!renderer)
-				return;
-			DeformData deformData = GetExistingDeformData(renderer);
-			if (deformData == null || deformData.Layers.Count == 0)
-				return;
-			string path = FileDialogHelper.ShowSaveDialog(L.ExportDeform, "deform", L.DeformFileFilter, "kksd");
-			if (string.IsNullOrEmpty(path))
-				return;
-			byte[] bytes = ShapeSerializer.SerializeSingleRenderer(deformData);
-			if (bytes == null)
-				return;
 			try
 			{
-				File.WriteAllBytes(path, bytes);
-				ShapeEditorPlugin.Logger.LogInfo(L.ExportSuccess);
+				poseControllerOwner.GetComponent<PoseController>()?._blendShapesEditor?.RefreshSkinnedMeshRendererList();
 			}
-			catch (Exception ex)
+			catch (Exception)
 			{
-				ShapeEditorPlugin.Logger.LogWarning("Export failed: " + ex.Message);
+				// ignored
 			}
-		}
-
-		private void DoImportDeform()
-		{
-			if (Window.Renderers.Count == 0)
-				return;
-			int index = Mathf.Clamp(Window.SelectedRendererIndex, 0, Window.Renderers.Count - 1);
-			Renderer renderer = Window.Renderers[index];
-			if (!renderer)
-				return;
-			string path = FileDialogHelper.ShowOpenDialog(L.ImportDeform, L.DeformFileFilter);
-			if (string.IsNullOrEmpty(path))
-				return;
-			byte[] data;
-			try
-			{
-				data = File.ReadAllBytes(path);
-			}
-			catch (Exception ex)
-			{
-				ShapeEditorPlugin.Logger.LogWarning("Import failed: " + ex.Message);
-				return;
-			}
-
-			List<DeformLayer> layers = ShapeSerializer.DeserializeSingleRenderer(data, out int vertexCount);
-			if (layers == null)
-			{
-				ShapeEditorPlugin.Logger.LogWarning(L.ImportInvalidFile);
-				return;
-			}
-			Mesh mesh = MeshHelper.GetMesh(renderer);
-			if (!mesh)
-				return;
-			if (vertexCount != mesh.vertexCount)
-			{
-				ShapeEditorPlugin.Logger.LogWarning(string.Format(L.ImportVertexMismatchFmt, vertexCount, mesh.vertexCount));
-				return;
-			}
-			bool studioMode;
-			DeformData deformData = GetDeformDataForRenderer(renderer, out studioMode);
-			if (deformData == null)
-				return;
-			Window.ActiveDeformData = deformData;
-			foreach (DeformLayer layer in layers)
-			{
-				layer.Dirty = true;
-				deformData.Layers.Add(layer);
-			}
-			deformData.ActiveLayerIndex = deformData.Layers.Count - 1;
-			_deformer?.InvalidateDeltaCache();
-			ShapeEditorPlugin.Logger.LogInfo(L.ImportSuccess);
 		}
 
 		private void DoLayerAdd()
@@ -466,57 +372,6 @@ namespace KKShapeEditor
 			}
 		}
 
-		private void DoSubdivide()
-		{
-			Renderer currentRenderer = GetCurrentRenderer();
-			if (!currentRenderer)
-				return;
-			MeshHelper.CloneMeshIfShared(currentRenderer);
-			Mesh mesh = MeshHelper.GetMesh(currentRenderer);
-			if (!mesh)
-				return;
-			HashSet<int> selectedFaces = null;
-			int[] faceArray = null;
-			if (Window.FaceSelect && Window.FaceSelect.SelectedFaces.Count > 0)
-			{
-				selectedFaces = Window.FaceSelect.SelectedFaces;
-				faceArray = new int[selectedFaces.Count];
-				selectedFaces.CopyTo(faceArray);
-			}
-			int subdivideLevel = Window.SubdivideLevel;
-			MeshHelper.Subdivide(mesh, subdivideLevel, selectedFaces);
-			MeshHelper.AppendSubdivisionFaces(mesh, faceArray, subdivideLevel);
-			if (Window.ActiveDeformData != null)
-				MeshHelper.ResetLayersForNewVertexCount(Window.ActiveDeformData, mesh.vertexCount);
-			if (!Window.FaceSelect) return;
-			Destroy(Window.FaceSelect.gameObject);
-			Window.FaceSelect = FaceSelectOverlay.Create(currentRenderer);
-		}
-
-		private void DoRestore()
-		{
-			Renderer currentRenderer = GetCurrentRenderer();
-			if (!currentRenderer)
-				return;
-			SkinnedMeshRenderer smr = currentRenderer as SkinnedMeshRenderer;
-			if (smr)
-			{
-				MeshHelper.RestoreOriginal(smr);
-			}
-			else
-			{
-				MeshFilter mf = currentRenderer.GetComponent<MeshFilter>();
-				if (mf)
-					MeshHelper.RestoreOriginal(mf);
-			}
-			Mesh mesh = MeshHelper.GetMesh(currentRenderer);
-			if (mesh && Window.ActiveDeformData != null)
-				MeshHelper.ResetLayersForNewVertexCount(Window.ActiveDeformData, mesh.vertexCount);
-			if (!Window.FaceSelect) return;
-			Destroy(Window.FaceSelect.gameObject);
-			Window.FaceSelect = FaceSelectOverlay.Create(currentRenderer);
-		}
-
 		private Renderer GetCurrentRenderer()
 		{
 			if (Window == null || Window.Renderers.Count == 0)
@@ -525,25 +380,21 @@ namespace KKShapeEditor
 			return Window.Renderers[index];
 		}
 
-		private static DeformData GetExistingDeformData(Renderer renderer)
-		{
-			ShapeEditorController charCtrl = renderer.GetComponentInParent<ShapeEditorController>();
-			if (charCtrl)
-				return charCtrl.GetDeformData(renderer);
-			ItemShapeController itemCtrl = renderer.GetComponentInParent<ItemShapeController>();
-			return itemCtrl ? itemCtrl.GetDeformData(renderer) : null;
-		}
-
 		private static DeformData GetDeformDataForRenderer(Renderer renderer, out bool studioMode)
 		{
-			studioMode = false;
-			ShapeEditorController charCtrl = renderer.GetComponentInParent<ShapeEditorController>();
-			if (charCtrl)
-				return charCtrl.GetOrCreateDeformData(renderer);
-			ItemShapeController itemCtrl = renderer.GetComponentInParent<ItemShapeController>();
-			if (!itemCtrl) return null;
-			studioMode = true;
-			return itemCtrl.GetOrCreateDeformData(renderer);
+			switch (renderer.TryGetOwningController(out Object controller))
+			{
+				case true when controller is BlendShapeEditorCharaController charaController:
+					studioMode = false;
+					return charaController.GetOrCreateDeformData(renderer);
+				case true when controller is BlendShapeEditorItemController itemController:
+					studioMode = true;
+					return itemController.GetOrCreateDeformData(renderer);
+				default:
+					studioMode = false;
+					BlendShapeEditorPlugin.Logger.LogError("Could not get deform data for renderer");
+					return null;
+			}
 		}
 
 		private void LateUpdate()
@@ -577,17 +428,6 @@ namespace KKShapeEditor
 			Camera main = Camera.main;
 			if (!main || Input == null)
 				return;
-			if (_targetRenderer)
-			{
-				ShapeEditorController charCtrl = _targetRenderer.GetComponentInParent<ShapeEditorController>();
-				Window.IsOnCharacter = charCtrl;
-				Window.BodyMeshReadable = charCtrl && charCtrl.GetBodySmr();
-			}
-			else
-			{
-				Window.IsOnCharacter = false;
-				Window.BodyMeshReadable = false;
-			}
 			SelectionTool.Radius = Window.BrushRadius;
 			SelectionTool.Strength = Window.BrushStrength;
 			SelectionTool.Falloff = Window.BrushFalloff;
@@ -911,7 +751,7 @@ namespace KKShapeEditor
 				}
 			}
 			_gizmo.UpdateHover(mousePos, cam, targetTransform);
-			if (Input.MouseButtonDown && _gizmo.HoveredAxis != GizmoAxis.None)
+			if (Input.MouseButtonDown && _gizmo.HoveredAxis != GizmoEnums.None)
 			{
 				if (!_gizmo.BeginDrag(mousePos, cam, targetTransform, activeLayer, cachedVertices)) return;
 				_gizmoBeforeSnapshot = new Dictionary<int, Vector3>(_gizmo.DragStartDeltas);

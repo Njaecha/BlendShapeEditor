@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace KKShapeEditor
+namespace BlendShapeEditor
 {
 	public class SelectionTool
 	{
-		public float Radius { get; set; } = ShapeEditorPlugin.DefaultBrushRadius != null ? ShapeEditorPlugin.DefaultBrushRadius.Value : 0.05f;
-		public float Strength { get; set; } = ShapeEditorPlugin.DefaultBrushStrength != null ? ShapeEditorPlugin.DefaultBrushStrength.Value : 0.5f;
+		public float Radius { get; set; } = BlendShapeEditorPlugin.DefaultBrushRadius != null ? BlendShapeEditorPlugin.DefaultBrushRadius.Value : 0.05f;
+		public float Strength { get; set; } = BlendShapeEditorPlugin.DefaultBrushStrength != null ? BlendShapeEditorPlugin.DefaultBrushStrength.Value : 0.5f;
 		public FalloffMode Falloff { get; set; } = FalloffMode.Smooth;
 		public SelectionToolMode ToolMode { get; set; }
 		public float SharpExponent { get; set; } = 3f;

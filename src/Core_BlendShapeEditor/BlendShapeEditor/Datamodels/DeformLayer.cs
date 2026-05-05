@@ -1,7 +1,7 @@
 using System.Linq;
 using UnityEngine;
 
-namespace KKShapeEditor
+namespace BlendShapeEditor
 {
 	public class DeformLayer
 	{

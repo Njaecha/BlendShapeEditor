@@ -1,4 +1,4 @@
-namespace KKShapeEditor
+namespace BlendShapeEditor
 {
 	public static class L
 	{
@@ -37,26 +37,12 @@ namespace KKShapeEditor
 		public static string NoLayerWarning;
 		public static string LayerDefaultNameFmt;
 		public static string TargetMesh;
-		public static string VerticesFacesFmt;
-		public static string Brush;
-		public static string BoxSelect;
 		public static string BrushRadiusFmt;
 		public static string SelectedVerticesFmt;
 		public static string FalloffLinear;
 		public static string FalloffSmooth;
 		public static string FalloffSharp;
-		public static string SelectFaces;
-		public static string SelectedFacesFmt;
-		public static string AllButton;
-		public static string NoneButton;
-		public static string InvertButton;
-		public static string LevelLabel;
-		public static string Subdivide;
-		public static string Restore;
-		public static string SubdivideLayerWarning;
 		public static string StrengthFmt;
-		public static string ApplyButton;
-		public static string ClearButton;
 		public static string EnterEditMode;
 		public static string ExitEditMode;
 		public static string CameraMode;
@@ -68,22 +54,12 @@ namespace KKShapeEditor
 		public static string HudLayerFmt;
 		public static string HudNoLayer;
 		public static string HudShortcuts;
-		public static string FaceSelectBrush;
-		public static string FaceSelectBox;
 		public static string RadiusSuffixFmt;
-		public static string RemapWeights;
-		public static string RestoreWeights;
-		public static string BodyMeshNotReadable;
-		public static string ExportDeform;
-		public static string ImportDeform;
-		public static string DeformFileFilter;
-		public static string ExportSuccess;
-		public static string ImportSuccess;
-		public static string ImportVertexMismatchFmt;
-		public static string ImportInvalidFile;
+		public static string BakeHeader;
+		public static string BakeNameLabel;
+		public static string BakeButton;
 		public static string HelpBrush;
 		public static string HelpGizmo;
-		public static string HelpSubdivide;
 
 		static L()
 		{
@@ -113,7 +89,7 @@ namespace KKShapeEditor
 		{
 			SelectObject = "Please select an object";
 			FilterLabel = "Filter:";
-			TabNames = new[] { "Shape", "Subdivide" };
+			TabNames = new[] { "Shape" };
 			BrushMode = "Brush";
 			GizmoMode = "Gizmo";
 			MoveTool = "Move";
@@ -144,26 +120,12 @@ namespace KKShapeEditor
 			NoLayerWarning = "Create a layer to start sculpting";
 			LayerDefaultNameFmt = "Layer {0}";
 			TargetMesh = "Target Mesh:";
-			VerticesFacesFmt = "Vertices: {0} | Faces: {1}";
-			Brush = "Brush";
-			BoxSelect = "Box Select";
 			BrushRadiusFmt = "Brush Radius: {0}";
 			SelectedVerticesFmt = "Selected: {0} vertices";
 			FalloffLinear = "Linear";
 			FalloffSmooth = "Smooth";
 			FalloffSharp = "Sharp";
-			SelectFaces = "Select Faces";
-			SelectedFacesFmt = "Selected: {0} / {1} faces";
-			AllButton = "All";
-			NoneButton = "None";
-			InvertButton = "Invert";
-			LevelLabel = "Level:";
-			Subdivide = "Subdivide";
-			Restore = "Restore";
-			SubdivideLayerWarning = "Subdividing will reset all layer data. Continue?";
 			StrengthFmt = "Strength: {0}";
-			ApplyButton = "Apply";
-			ClearButton = "Clear";
 			EnterEditMode = "Enter Edit Mode";
 			ExitEditMode = "Exit Edit Mode";
 			CameraMode = "Camera Mode (Ctrl)";
@@ -175,29 +137,19 @@ namespace KKShapeEditor
 			HudLayerFmt = "Layer: {0}";
 			HudNoLayer = "(No Layer)";
 			HudShortcuts = "Ctrl+LMB:Rotate  Shift:Normal\nCtrl+RMB:Zoom  Alt:Deflate\nLMB:Brush  RMB:Select\nCtrl+Z:Undo  Ctrl+Y:Redo";
-			FaceSelectBrush = "Face Select: Brush";
-			FaceSelectBox = "Face Select: Box";
 			RadiusSuffixFmt = " | Radius: {0}";
-			RemapWeights = "Remap Weights";
-			RestoreWeights = "Restore Weights";
-			BodyMeshNotReadable = "Body mesh is not readable";
-			ExportDeform = "Export";
-			ImportDeform = "Import";
-			DeformFileFilter = "Shape Deform (*.kksd)|*.kksd";
-			ExportSuccess = "Export successful";
-			ImportSuccess = "Import successful";
-			ImportVertexMismatchFmt = "Vertex count mismatch: file has {0}, mesh has {1}";
-			ImportInvalidFile = "Invalid file format";
-			HelpBrush = "Brush Mode — sculpt by painting on the mesh.\n\nSetup\n- Pick a renderer, then click Enter Edit Mode.\n- Add a Layer before sculpting (required).\n\nTools\n- Move: drags vertices along screen direction. Hold Shift to push/pull along the normal.\n- Smooth: averages vertex positions within the brush.\n- Inflate: pushes along the normal. Hold Alt to deflate.\n\nParameters\n- Radius: brush size.\n- Strength: per-frame influence.\n- Falloff: Linear / Smooth / Sharp.\n\nSymmetry\n- Enable, pick an axis (X/Y/Z).\n- Set Center on a reference vertex, or leave at 0.\n\nLayers\n- Stack multiple deformations; each has its own Weight.\n- Reorder with Up / Down; final position = sum(layer delta * weight).\n\nRemap Weights (clothing)\n- After large deformation, click Remap Weights so skinning follows the nearest body bones.\n- Restore Weights reverts to the original bone weights.\n\nExport / Import (.kksd)\n- Export the current renderer's layers any time.\n- Import merges layers into the current renderer (Edit Mode only).\n\nShortcuts\n- Ctrl+Z / Ctrl+Y: Undo / Redo.\n- Hold Ctrl: pass input to camera control.";
+			BakeHeader = "Exit and Bake to BlendShape";
+			BakeNameLabel = "Name:";
+			BakeButton = "Bake";
+			HelpBrush = "Brush Mode — sculpt by painting on the mesh.\n\nSetup\n- Pick a renderer, then click Enter Edit Mode.\n- Add a Layer before sculpting (required).\n\nTools\n- Move: drags vertices along screen direction. Hold Shift to push/pull along the normal.\n- Smooth: averages vertex positions within the brush.\n- Inflate: pushes along the normal. Hold Alt to deflate.\n\nParameters\n- Radius: brush size.\n- Strength: per-frame influence.\n- Falloff: Linear / Smooth / Sharp.\n\nSymmetry\n- Enable, pick an axis (X/Y/Z).\n- Set Center on a reference vertex, or leave at 0.\n\nLayers\n- Stack multiple deformations; each has its own Weight.\n- Reorder with Up / Down; final position = sum(layer delta * weight).\n\nBake\n- When satisfied, click Bake to commit the sculpt as a BlendShape.\n- The blendshape is added to the mesh and registered in BlendShapeCreator.\n\nShortcuts\n- Ctrl+Z / Ctrl+Y: Undo / Redo.\n- Hold Ctrl: pass input to camera control.";
 			HelpGizmo = "Gizmo Mode — transform selected vertices with handles.\n\nSelect Vertices\n- Right-click drag to box-select.\n- Hold Ctrl while dragging to skip selection (camera only).\n\nHandles\n- Translate: three axes, XY/XZ/YZ planes, center cube (Free).\n- Rotate: three axis rings + outer white ring (ViewRotate, faces camera).\n- Scale: three axes + center cube (uniform).\n\nCoordinate Space\n- World: fixed XYZ.\n- Object: aligned to the character/item root rotation.\n- Normal: aligned to the selected vertices' average normal.\n\nSoft Selection\n- Extends influence beyond hard-selected vertices.\n- Radius: influence distance.\n- Volume: straight-line distance through space.\n- Surface: BFS along mesh edges (does not pierce thin meshes).\n- Radius/mode changes are throttled 150 ms before recomputing.\n\nSymmetry\n- Enable + pick an axis; moves/rotations/scales mirror automatically.\n\nShortcuts\n- Ctrl+Z / Ctrl+Y: Undo / Redo.\n- Hold Ctrl: pass input to camera control.";
-			HelpSubdivide = "Subdivide — increase mesh density for finer sculpting.\n\nFace Selection\n- Use the face-select overlay to pick triangles to subdivide.\n- All / None / Invert helpers are provided.\n\nControls\n- Level: subdivision depth (1 = 4x, 2 = 16x triangles).\n- Subdivide: applies to the selected faces.\n- Restore: reverts the mesh to its original topology.\n\nWarnings\n- Subdividing resets all Layer delta data (vertex count changes).\n- Undo history is cleared after subdivision.\n\nPlatform Limits\n- Koikatsu (net35): mesh cannot exceed 65535 vertices — Subdivide aborts above this.\n- Koikatsu Sunshine: supports >65535 vertices via UInt32 index format.";
 		}
 
 		private static void LoadJapanese()
 		{
 			SelectObject = "オブジェクトを選択してください";
 			FilterLabel = "フィルター:";
-			TabNames = new[] { "シェイプ", "サブディバイド" };
+			TabNames = new[] { "シェイプ" };
 			BrushMode = "ブラシ";
 			GizmoMode = "ギズモ";
 			MoveTool = "移動";
@@ -228,26 +180,12 @@ namespace KKShapeEditor
 			NoLayerWarning = "レイヤーを作成してください";
 			LayerDefaultNameFmt = "レイヤー {0}";
 			TargetMesh = "ターゲットメッシュ:";
-			VerticesFacesFmt = "頂点: {0} | 面: {1}";
-			Brush = "ブラシ";
-			BoxSelect = "ボックス選択";
 			BrushRadiusFmt = "ブラシ半径: {0}";
 			SelectedVerticesFmt = "選択: {0} 頂点";
 			FalloffLinear = "リニア";
 			FalloffSmooth = "スムーズ";
 			FalloffSharp = "シャープ";
-			SelectFaces = "面を選択";
-			SelectedFacesFmt = "選択: {0} / {1} 面";
-			AllButton = "全選択";
-			NoneButton = "選択解除";
-			InvertButton = "反転";
-			LevelLabel = "レベル:";
-			Subdivide = "サブディバイド";
-			Restore = "復元";
-			SubdivideLayerWarning = "サブディバイドするとレイヤーデータがリセットされます。続行しますか？";
 			StrengthFmt = "強度: {0}";
-			ApplyButton = "適用";
-			ClearButton = "クリア";
 			EnterEditMode = "編集モード開始";
 			ExitEditMode = "編集モード終了";
 			CameraMode = "カメラモード (Ctrl)";
@@ -259,29 +197,19 @@ namespace KKShapeEditor
 			HudLayerFmt = "レイヤー: {0}";
 			HudNoLayer = "(レイヤーなし)";
 			HudShortcuts = "Ctrl+LMB:回転  Shift:法線\nCtrl+RMB:ズーム  Alt:収縮\nLMB:ブラシ  RMB:選択\nCtrl+Z:元に戻す  Ctrl+Y:やり直し";
-			FaceSelectBrush = "面選択: ブラシ";
-			FaceSelectBox = "面選択: ボックス";
 			RadiusSuffixFmt = " | 半径: {0}";
-			RemapWeights = "ウェイト再割り当て";
-			RestoreWeights = "ウェイト復元";
-			BodyMeshNotReadable = "ボディメッシュが読み取れません";
-			ExportDeform = "エクスポート";
-			ImportDeform = "インポート";
-			DeformFileFilter = "形状変形 (*.kksd)|*.kksd";
-			ExportSuccess = "エクスポート成功";
-			ImportSuccess = "インポート成功";
-			ImportVertexMismatchFmt = "頂点数不一致: ファイル {0}, メッシュ {1}";
-			ImportInvalidFile = "無効なファイル形式";
-			HelpBrush = "ブラシモード — メッシュ上をペイントして造形します。\n\n準備\n- レンダラーを選択し、編集モード開始を押します。\n- 造形前にレイヤーを追加してください(必須)。\n\nツール\n- 移動: 画面方向に頂点をドラッグ。Shift で法線方向の押し引き。\n- スムーズ: ブラシ内の頂点位置を平均化。\n- 膨張: 法線方向に押し出し。Alt で収縮。\n\nパラメータ\n- 半径: ブラシのサイズ。\n- 強度: フレーム毎の影響度。\n- フォールオフ: リニア / スムーズ / シャープ。\n\nシンメトリー\n- 有効化して軸(X/Y/Z)を選択。\n- 参照頂点で中心を設定、または 0 のままにします。\n\nレイヤー\n- 複数の変形を重ね、各レイヤーにウェイトを設定。\n- 上/下で順序変更。最終位置 = Σ(レイヤーのデルタ × ウェイト)。\n\nウェイト再割り当て(衣装向け)\n- 大変形後、ウェイト再割り当てを押すとスキニングが最寄りのボディボーンに追従します。\n- ウェイト復元で元のボーンウェイトに戻します。\n\nエクスポート / インポート (.kksd)\n- 現在のレンダラーのレイヤーをいつでもエクスポート可能。\n- インポートは現在のレンダラーにレイヤーを統合します(編集モード時のみ)。\n\nショートカット\n- Ctrl+Z / Ctrl+Y: 元に戻す / やり直し。\n- Ctrl を押しっぱなし: 入力をカメラ操作に渡します。";
-			HelpGizmo = "ギズモモード — 選択頂点をハンドルで変換します。\n\n頂点の選択\n- 右クリックドラッグでボックス選択。\n- Ctrl を押しながらドラッグすると選択をスキップ(カメラのみ)。\n\nハンドル\n- 移動: 3 軸 + XY/XZ/YZ 平面 + 中心立方体 (Free)。\n- 回転: 3 軸リング + 外側の白いリング (ViewRotate、カメラに正対)。\n- スケール: 3 軸 + 中心立方体 (均等)。\n\n座標空間\n- ワールド: 固定 XYZ。\n- オブジェクト: キャラ/アイテムのルート回転に沿う。\n- 法線: 選択頂点の平均法線に沿う。\n\nソフト選択\n- 確定選択の外側まで影響を広げます。\n- 半径: 影響距離。\n- ボリューム: 空間を貫通する直線距離。\n- サーフェス: メッシュ辺に沿った BFS(薄いメッシュを貫通しません)。\n- 半径/モード変更は 150 ms のスロットリング後に再計算されます。\n\nシンメトリー\n- 有効化して軸を選択。移動/回転/スケールが自動的にミラーリングされます。\n\nショートカット\n- Ctrl+Z / Ctrl+Y: 元に戻す / やり直し。\n- Ctrl を押しっぱなし: 入力をカメラ操作に渡します。";
-			HelpSubdivide = "サブディバイド — 造形精度を高めるためメッシュ密度を増やします。\n\n面の選択\n- 面選択オーバーレイで分割対象の三角形を選びます。\n- 全選択 / 選択解除 / 反転の補助機能があります。\n\n操作\n- レベル: 分割段階(1 = 4倍、2 = 16倍の三角形)。\n- サブディバイド: 選択された面に適用。\n- 復元: メッシュを元のトポロジーに戻します。\n\n注意\n- サブディバイドすると全レイヤーのデルタデータがリセットされます(頂点数が変化するため)。\n- サブディバイド後は Undo 履歴がクリアされます。\n\nプラットフォーム制限\n- Koikatsu (net35): メッシュは 65535 頂点を超えられません — 超過時はサブディバイドが中止されます。\n- Koikatsu Sunshine: UInt32 インデックス形式により 65535 超の頂点をサポート。";
+			BakeHeader = "ブレンドシェイプにベイク";
+			BakeNameLabel = "名前:";
+			BakeButton = "ベイク";
+			HelpBrush = "ブラシモード — メッシュ上をペイントして造形します。\n\n準備\n- レンダラーを選択し、編集モード開始を押します。\n- 造形前にレイヤーを追加してください(必須)。\n\nツール\n- 移動: 画面方向に頂点をドラッグ。Shift で法線方向の押し引き。\n- スムーズ: ブラシ内の頂点位置を平均化。\n- 膨張: 法線方向に押し出し。Alt で収縮。\n\nパラメータ\n- 半径: ブラシのサイズ。\n- 強度: フレーム毎の影響度。\n- フォールオフ: リニア / スムーズ / シャープ。\n\nシンメトリー\n- 有効化して軸(X/Y/Z)を選択。\n- 参照頂点で中心を設定、または 0 のままにします。\n\nレイヤー\n- 複数の変形を重ね、各レイヤーにウェイトを設定。\n- 上/下で順序変更。最終位置 = Σ(レイヤーのデルタ × ウェイト)。\n\nベイク\n- 満足したらベイクを押してブレンドシェイプとして保存します。\n\nショートカット\n- Ctrl+Z / Ctrl+Y: 元に戻す / やり直し。";
+			HelpGizmo = "ギズモモード — 選択頂点をハンドルで変換します。\n\n頂点の選択\n- 右クリックドラッグでボックス選択。\n\nハンドル\n- 移動: 3 軸 + XY/XZ/YZ 平面 + 中心立方体 (Free)。\n- 回転: 3 軸リング + 外側の白いリング (ViewRotate)。\n- スケール: 3 軸 + 中心立方体 (均等)。\n\nショートカット\n- Ctrl+Z / Ctrl+Y: 元に戻す / やり直し。";
 		}
 
 		private static void LoadTraditionalChinese()
 		{
 			SelectObject = "請選擇物件";
 			FilterLabel = "篩選:";
-			TabNames = new[] { "形狀", "細分" };
+			TabNames = new[] { "形狀" };
 			BrushMode = "筆刷";
 			GizmoMode = "Gizmo";
 			MoveTool = "推拉";
@@ -312,26 +240,12 @@ namespace KKShapeEditor
 			NoLayerWarning = "請先建立圖層才能開始雕刻";
 			LayerDefaultNameFmt = "圖層 {0}";
 			TargetMesh = "目標網格:";
-			VerticesFacesFmt = "頂點: {0} | 面: {1}";
-			Brush = "筆刷";
-			BoxSelect = "框選";
 			BrushRadiusFmt = "筆刷半徑: {0}";
 			SelectedVerticesFmt = "已選: {0} 頂點";
 			FalloffLinear = "線性";
 			FalloffSmooth = "平滑";
 			FalloffSharp = "銳利";
-			SelectFaces = "選取面";
-			SelectedFacesFmt = "已選: {0} / {1} 面";
-			AllButton = "全選";
-			NoneButton = "取消";
-			InvertButton = "反轉";
-			LevelLabel = "層級:";
-			Subdivide = "細分";
-			Restore = "還原";
-			SubdivideLayerWarning = "細分將會重置所有圖層資料，是否繼續？";
 			StrengthFmt = "強度: {0}";
-			ApplyButton = "套用";
-			ClearButton = "清除";
 			EnterEditMode = "進入編輯模式";
 			ExitEditMode = "退出編輯模式";
 			CameraMode = "相機模式 (Ctrl)";
@@ -343,29 +257,19 @@ namespace KKShapeEditor
 			HudLayerFmt = "圖層: {0}";
 			HudNoLayer = "(無圖層)";
 			HudShortcuts = "Ctrl+LMB:旋轉  Shift:法線\nCtrl+RMB:縮放  Alt:收縮\nLMB:筆刷  RMB:選取\nCtrl+Z:復原  Ctrl+Y:重做";
-			FaceSelectBrush = "面選取: 筆刷";
-			FaceSelectBox = "面選取: 框選";
 			RadiusSuffixFmt = " | 半徑: {0}";
-			RemapWeights = "重新分配權重";
-			RestoreWeights = "還原權重";
-			BodyMeshNotReadable = "身體網格無法讀取";
-			ExportDeform = "匯出";
-			ImportDeform = "匯入";
-			DeformFileFilter = "形狀變形 (*.kksd)|*.kksd";
-			ExportSuccess = "匯出成功";
-			ImportSuccess = "匯入成功";
-			ImportVertexMismatchFmt = "頂點數不一致: 檔案 {0}, 網格 {1}";
-			ImportInvalidFile = "無效的檔案格式";
-			HelpBrush = "筆刷模式 — 在網格上繪製來雕刻形狀。\n\n準備\n- 選擇目標 renderer，按下「進入編輯模式」。\n- 雕刻前必須先新增圖層。\n\n工具\n- 推拉：預設沿畫面方向拖動頂點。按住 Shift 改為沿法線推拉。\n- 平滑：將筆刷內的頂點位置平均化。\n- 膨脹：沿法線推出。按住 Alt 反向收縮。\n\n參數\n- 半徑：筆刷大小。\n- 強度：每幀影響強度。\n- 衰減：線性 / 平滑 / 銳利。\n\n對稱\n- 啟用後選擇軸向 (X/Y/Z)。\n- 於參考頂點設定中心，或保持為 0。\n\n圖層\n- 多段變形可堆疊，各自有獨立權重。\n- 用「上移 / 下移」調整順序；最終位移 = Σ(圖層 delta × 權重)。\n\n重新分配權重（衣服專用）\n- 大幅變形後按「重新分配權重」，可讓 skinning 跟隨最近的身體骨骼。\n- 「還原權重」可回復原始骨骼權重。\n\n匯出 / 匯入 (.kksd)\n- 任何時候都可匯出當前 renderer 的圖層。\n- 匯入會合併圖層到當前 renderer（僅編輯模式可用）。\n\n快捷鍵\n- Ctrl+Z / Ctrl+Y：復原 / 重做。\n- 按住 Ctrl：輸入交給相機控制。";
-			HelpGizmo = "Gizmo 模式 — 以手柄變換已選取的頂點。\n\n選取頂點\n- 右鍵拖曳框選。\n- 拖曳時按住 Ctrl 會跳過選取（僅操作相機）。\n\n手柄\n- 位移：3 軸 + XY/XZ/YZ 平面 + 中心方塊 (Free)。\n- 旋轉：3 軸環 + 外圍白環 (ViewRotate，面向相機)。\n- 縮放：3 軸 + 中心方塊（均勻縮放）。\n\n座標空間\n- World：固定 XYZ。\n- Object：對齊角色 / 物件根節點旋轉。\n- Normal：對齊選取頂點的平均法線。\n\n軟選取\n- 將影響範圍擴展到硬選取頂點之外。\n- 半徑：影響距離。\n- 體積：空間中的直線距離。\n- 表面：沿 mesh 邊做 BFS（不穿透薄 mesh）。\n- 半徑 / 模式變更節流 150 ms 後才重算。\n\n對稱\n- 啟用並選擇軸向，移動 / 旋轉 / 縮放自動鏡射。\n\n快捷鍵\n- Ctrl+Z / Ctrl+Y：復原 / 重做。\n- 按住 Ctrl：輸入交給相機控制。";
-			HelpSubdivide = "細分 — 提高 mesh 密度以進行更精細的雕刻。\n\n面選取\n- 使用面選取 overlay 選出要細分的三角形。\n- 提供「全選 / 取消 / 反轉」輔助按鈕。\n\n控制\n- 層級：細分深度（1 = 4 倍、2 = 16 倍三角形）。\n- 細分：對已選取的面套用細分。\n- 還原：回復到原始 mesh 拓撲。\n\n注意事項\n- 細分會重置所有圖層 delta（頂點數會改變）。\n- 細分後 Undo 歷史會被清空。\n\n平台限制\n- Koikatsu (net35)：mesh 不可超過 65535 頂點，超過時細分會中止。\n- Koikatsu Sunshine：透過 UInt32 索引格式支援超過 65535 頂點。";
+			BakeHeader = "烘焙至 BlendShape";
+			BakeNameLabel = "名稱:";
+			BakeButton = "烘焙";
+			HelpBrush = "筆刷模式 — 在網格上繪製來雕刻形狀。\n\n準備\n- 選擇目標 renderer，按下「進入編輯模式」。\n- 雕刻前必須先新增圖層。\n\n工具\n- 推拉 / 平滑 / 膨脹。\n\n烘焙\n- 滿意後按烘焙，將雕刻儲存為 BlendShape。\n\n快捷鍵\n- Ctrl+Z / Ctrl+Y：復原 / 重做。";
+			HelpGizmo = "Gizmo 模式 — 以手柄變換已選取的頂點。\n\n快捷鍵\n- Ctrl+Z / Ctrl+Y：復原 / 重做。";
 		}
 
 		private static void LoadSimplifiedChinese()
 		{
 			SelectObject = "请选择对象";
 			FilterLabel = "筛选:";
-			TabNames = new[] { "形状", "细分" };
+			TabNames = new[] { "形状" };
 			BrushMode = "画笔";
 			GizmoMode = "Gizmo";
 			MoveTool = "推拉";
@@ -396,26 +300,12 @@ namespace KKShapeEditor
 			NoLayerWarning = "请先创建图层才能开始雕刻";
 			LayerDefaultNameFmt = "图层 {0}";
 			TargetMesh = "目标网格:";
-			VerticesFacesFmt = "顶点: {0} | 面: {1}";
-			Brush = "画笔";
-			BoxSelect = "框选";
 			BrushRadiusFmt = "画笔半径: {0}";
 			SelectedVerticesFmt = "已选: {0} 顶点";
 			FalloffLinear = "线性";
 			FalloffSmooth = "平滑";
 			FalloffSharp = "锐利";
-			SelectFaces = "选择面";
-			SelectedFacesFmt = "已选: {0} / {1} 面";
-			AllButton = "全选";
-			NoneButton = "取消";
-			InvertButton = "反转";
-			LevelLabel = "级别:";
-			Subdivide = "细分";
-			Restore = "还原";
-			SubdivideLayerWarning = "细分将会重置所有图层数据，是否继续？";
 			StrengthFmt = "强度: {0}";
-			ApplyButton = "应用";
-			ClearButton = "清除";
 			EnterEditMode = "进入编辑模式";
 			ExitEditMode = "退出编辑模式";
 			CameraMode = "相机模式 (Ctrl)";
@@ -427,29 +317,19 @@ namespace KKShapeEditor
 			HudLayerFmt = "图层: {0}";
 			HudNoLayer = "(无图层)";
 			HudShortcuts = "Ctrl+LMB:旋转  Shift:法线\nCtrl+RMB:缩放  Alt:收缩\nLMB:画笔  RMB:选取\nCtrl+Z:撤销  Ctrl+Y:重做";
-			FaceSelectBrush = "面选择: 画笔";
-			FaceSelectBox = "面选择: 框选";
 			RadiusSuffixFmt = " | 半径: {0}";
-			RemapWeights = "重新分配权重";
-			RestoreWeights = "还原权重";
-			BodyMeshNotReadable = "身体网格无法读取";
-			ExportDeform = "导出";
-			ImportDeform = "导入";
-			DeformFileFilter = "形状变形 (*.kksd)|*.kksd";
-			ExportSuccess = "导出成功";
-			ImportSuccess = "导入成功";
-			ImportVertexMismatchFmt = "顶点数不一致: 文件 {0}, 网格 {1}";
-			ImportInvalidFile = "无效的文件格式";
-			HelpBrush = "画笔模式 — 在网格上绘制来雕刻形状。\n\n准备\n- 选择目标 renderer，按下「进入编辑模式」。\n- 雕刻前必须先新增图层。\n\n工具\n- 推拉：默认沿画面方向拖动顶点。按住 Shift 改为沿法线推拉。\n- 平滑：将画笔内的顶点位置平均化。\n- 膨胀：沿法线推出。按住 Alt 反向收缩。\n\n参数\n- 半径：画笔大小。\n- 强度：每帧影响强度。\n- 衰减：线性 / 平滑 / 锐利。\n\n对称\n- 启用后选择轴向 (X/Y/Z)。\n- 于参考顶点设定中心，或保持为 0。\n\n图层\n- 多段变形可堆叠，各自有独立权重。\n- 用「上移 / 下移」调整顺序；最终位移 = Σ(图层 delta × 权重)。\n\n重新分配权重（衣服专用）\n- 大幅变形后按「重新分配权重」，可让 skinning 跟随最近的身体骨骼。\n- 「还原权重」可恢复原始骨骼权重。\n\n导出 / 导入 (.kksd)\n- 任何时候都可导出当前 renderer 的图层。\n- 导入会合并图层到当前 renderer（仅编辑模式可用）。\n\n快捷键\n- Ctrl+Z / Ctrl+Y：撤销 / 重做。\n- 按住 Ctrl：输入交给相机控制。";
-			HelpGizmo = "Gizmo 模式 — 以手柄变换已选取的顶点。\n\n选取顶点\n- 右键拖曳框选。\n- 拖曳时按住 Ctrl 会跳过选取（仅操作相机）。\n\n手柄\n- 位移：3 轴 + XY/XZ/YZ 平面 + 中心方块 (Free)。\n- 旋转：3 轴环 + 外围白环 (ViewRotate，面向相机)。\n- 缩放：3 轴 + 中心方块（均匀缩放）。\n\n坐标空间\n- World：固定 XYZ。\n- Object：对齐角色 / 物件根节点旋转。\n- Normal：对齐选取顶点的平均法线。\n\n软选取\n- 将影响范围扩展到硬选取顶点之外。\n- 半径：影响距离。\n- 体积：空间中的直线距离。\n- 表面：沿 mesh 边做 BFS（不穿透薄 mesh）。\n- 半径 / 模式变更节流 150 ms 后才重算。\n\n对称\n- 启用并选择轴向，移动 / 旋转 / 缩放自动镜射。\n\n快捷键\n- Ctrl+Z / Ctrl+Y：撤销 / 重做。\n- 按住 Ctrl：输入交给相机控制。";
-			HelpSubdivide = "细分 — 提高 mesh 密度以进行更精细的雕刻。\n\n面选取\n- 使用面选取 overlay 选出要细分的三角形。\n- 提供「全选 / 取消 / 反转」辅助按钮。\n\n控制\n- 级别：细分深度（1 = 4 倍、2 = 16 倍三角形）。\n- 细分：对已选取的面应用细分。\n- 还原：恢复到原始 mesh 拓扑。\n\n注意事项\n- 细分会重置所有图层 delta（顶点数会改变）。\n- 细分后 Undo 历史会被清空。\n\n平台限制\n- Koikatsu (net35)：mesh 不可超过 65535 顶点，超过时细分会中止。\n- Koikatsu Sunshine：透过 UInt32 索引格式支持超过 65535 顶点。";
+			BakeHeader = "烘焙至 BlendShape";
+			BakeNameLabel = "名称:";
+			BakeButton = "烘焙";
+			HelpBrush = "画笔模式 — 在网格上绘制来雕刻形状。\n\n准备\n- 选择目标 renderer，按下「进入编辑模式」。\n- 雕刻前必须先新增图层。\n\n工具\n- 推拉 / 平滑 / 膨胀。\n\n烘焙\n- 满意后按烘焙，将雕刻保存为 BlendShape。\n\n快捷键\n- Ctrl+Z / Ctrl+Y：撤销 / 重做。";
+			HelpGizmo = "Gizmo 模式 — 以手柄变换已选取的顶点。\n\n快捷键\n- Ctrl+Z / Ctrl+Y：撤销 / 重做。";
 		}
 
 		private static void LoadKorean()
 		{
 			SelectObject = "오브젝트를 선택하세요";
 			FilterLabel = "필터:";
-			TabNames = new[] { "셰이프", "서브디바이드" };
+			TabNames = new[] { "셰이프" };
 			BrushMode = "브러시";
 			GizmoMode = "기즈모";
 			MoveTool = "이동";
@@ -480,26 +360,12 @@ namespace KKShapeEditor
 			NoLayerWarning = "레이어를 생성해야 조각을 시작할 수 있습니다";
 			LayerDefaultNameFmt = "레이어 {0}";
 			TargetMesh = "대상 메시:";
-			VerticesFacesFmt = "버텍스: {0} | 면: {1}";
-			Brush = "브러시";
-			BoxSelect = "박스 선택";
 			BrushRadiusFmt = "브러시 반경: {0}";
 			SelectedVerticesFmt = "선택: {0} 버텍스";
 			FalloffLinear = "리니어";
 			FalloffSmooth = "스무스";
 			FalloffSharp = "샤프";
-			SelectFaces = "면 선택";
-			SelectedFacesFmt = "선택: {0} / {1} 면";
-			AllButton = "전체";
-			NoneButton = "해제";
-			InvertButton = "반전";
-			LevelLabel = "레벨:";
-			Subdivide = "서브디바이드";
-			Restore = "복원";
-			SubdivideLayerWarning = "서브디바이드하면 모든 레이어 데이터가 초기화됩니다. 계속하시겠습니까?";
 			StrengthFmt = "강도: {0}";
-			ApplyButton = "적용";
-			ClearButton = "초기화";
 			EnterEditMode = "편집 모드 시작";
 			ExitEditMode = "편집 모드 종료";
 			CameraMode = "카메라 모드 (Ctrl)";
@@ -511,22 +377,12 @@ namespace KKShapeEditor
 			HudLayerFmt = "레이어: {0}";
 			HudNoLayer = "(레이어 없음)";
 			HudShortcuts = "Ctrl+LMB:회전  Shift:법선\nCtrl+RMB:줌  Alt:수축\nLMB:브러시  RMB:선택\nCtrl+Z:실행 취소  Ctrl+Y:다시 실행";
-			FaceSelectBrush = "면 선택: 브러시";
-			FaceSelectBox = "면 선택: 박스";
 			RadiusSuffixFmt = " | 반경: {0}";
-			RemapWeights = "가중치 재할당";
-			RestoreWeights = "가중치 복원";
-			BodyMeshNotReadable = "바디 메시를 읽을 수 없습니다";
-			ExportDeform = "내보내기";
-			ImportDeform = "가져오기";
-			DeformFileFilter = "셰이프 변형 (*.kksd)|*.kksd";
-			ExportSuccess = "내보내기 성공";
-			ImportSuccess = "가져오기 성공";
-			ImportVertexMismatchFmt = "버텍스 수 불일치: 파일 {0}, 메시 {1}";
-			ImportInvalidFile = "잘못된 파일 형식";
-			HelpBrush = "브러시 모드 — 메시 위에 페인팅하여 조각합니다.\n\n준비\n- 렌더러를 선택하고 「편집 모드 시작」을 누르세요.\n- 조각 전에 레이어를 먼저 추가해야 합니다.\n\n도구\n- 이동: 기본은 화면 방향으로 버텍스 드래그. Shift로 법선 방향으로 변경.\n- 스무스: 브러시 내 버텍스 위치를 평균화.\n- 팽창: 법선 방향으로 밀어냄. Alt로 수축.\n\n파라미터\n- 반경: 브러시 크기.\n- 강도: 프레임당 영향도.\n- 감쇠: 리니어 / 스무스 / 샤프.\n\n대칭\n- 활성화 후 축(X/Y/Z)을 선택.\n- 기준 버텍스에서 중심을 설정하거나 0으로 유지.\n\n레이어\n- 여러 변형을 쌓고 각자 웨이트를 가집니다.\n- 위/아래로 순서 변경. 최종 위치 = Σ(레이어 델타 × 웨이트).\n\n가중치 재할당(의상 전용)\n- 큰 변형 후 가중치 재할당을 누르면 스키닝이 가장 가까운 바디 본을 따라갑니다.\n- 가중치 복원으로 원래 본 가중치로 되돌립니다.\n\n내보내기 / 가져오기 (.kksd)\n- 언제든 현재 렌더러의 레이어를 내보낼 수 있습니다.\n- 가져오기는 현재 렌더러에 레이어를 병합합니다(편집 모드에서만).\n\n단축키\n- Ctrl+Z / Ctrl+Y: 실행 취소 / 다시 실행.\n- Ctrl을 누르고 있으면 입력이 카메라 제어로 전달됩니다.";
-			HelpGizmo = "기즈모 모드 — 선택된 버텍스를 핸들로 변환합니다.\n\n버텍스 선택\n- 오른쪽 클릭 드래그로 박스 선택.\n- 드래그 중 Ctrl을 누르면 선택을 건너뜁니다(카메라만).\n\n핸들\n- 이동: 3축 + XY/XZ/YZ 평면 + 중앙 큐브 (Free).\n- 회전: 3축 링 + 외곽 흰색 링 (ViewRotate, 카메라를 향함).\n- 스케일: 3축 + 중앙 큐브(균일 스케일).\n\n좌표 공간\n- World: 고정 XYZ.\n- Object: 캐릭터/아이템 루트 회전에 정렬.\n- Normal: 선택 버텍스의 평균 법선에 정렬.\n\n소프트 선택\n- 하드 선택된 버텍스 바깥까지 영향 범위를 확장합니다.\n- 반경: 영향 거리.\n- 볼륨: 공간을 관통하는 직선 거리.\n- 서피스: 메시 에지를 따라 BFS(얇은 메시를 관통하지 않음).\n- 반경/모드 변경은 150 ms 스로틀링 후 재계산됩니다.\n\n대칭\n- 활성화하고 축을 선택. 이동/회전/스케일이 자동으로 미러링됩니다.\n\n단축키\n- Ctrl+Z / Ctrl+Y: 실행 취소 / 다시 실행.\n- Ctrl을 누르고 있으면 입력이 카메라 제어로 전달됩니다.";
-			HelpSubdivide = "서브디바이드 — 메시 밀도를 높여 더 정밀한 조각을 가능하게 합니다.\n\n면 선택\n- 면 선택 오버레이로 서브디바이드할 삼각형을 고릅니다.\n- 전체 / 해제 / 반전 보조 기능이 제공됩니다.\n\n제어\n- 레벨: 서브디비전 깊이(1 = 4배, 2 = 16배 삼각형).\n- 서브디바이드: 선택된 면에 적용.\n- 복원: 메시를 원래 토폴로지로 되돌립니다.\n\n주의\n- 서브디바이드는 모든 레이어 델타 데이터를 재설정합니다(버텍스 수가 변경되므로).\n- 서브디바이드 후 실행 취소 이력은 지워집니다.\n\n플랫폼 제한\n- Koikatsu (net35): 메시는 65535 버텍스를 초과할 수 없으며 — 초과 시 서브디바이드가 중단됩니다.\n- Koikatsu Sunshine: UInt32 인덱스 형식으로 65535 초과 버텍스를 지원합니다.";
+			BakeHeader = "BlendShape로 굽기";
+			BakeNameLabel = "이름:";
+			BakeButton = "굽기";
+			HelpBrush = "브러시 모드 — 메시 위에 페인팅하여 조각합니다.\n\n준비\n- 렌더러를 선택하고 「편집 모드 시작」을 누르세요.\n- 조각 전에 레이어를 먼저 추가해야 합니다.\n\n도구\n- 이동 / 스무스 / 팽창.\n\n굽기\n- 만족스러우면 굽기를 눌러 BlendShape으로 저장합니다.\n\n단축키\n- Ctrl+Z / Ctrl+Y: 실행 취소 / 다시 실행.";
+			HelpGizmo = "기즈모 모드 — 선택된 버텍스를 핸들로 변환합니다.\n\n단축키\n- Ctrl+Z / Ctrl+Y: 실행 취소 / 다시 실행.";
 		}
 
 		public enum Language

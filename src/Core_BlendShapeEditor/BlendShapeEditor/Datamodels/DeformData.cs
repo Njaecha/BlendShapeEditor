@@ -2,14 +2,13 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-namespace KKShapeEditor
+namespace BlendShapeEditor
 {
 	public class DeformData
 	{
 		public string RendererPath { get; set; }
 		public List<DeformLayer> Layers { get; private set; }
 		public int ActiveLayerIndex { get; set; }
-		public bool WeightRemapped { get; set; }
 
 		public DeformData(string rendererPath)
 		{
@@ -113,6 +112,12 @@ namespace KKShapeEditor
 			}
 			if (ActiveLayerIndex > index)
 				ActiveLayerIndex--;
+		}
+
+		public void ClearLayers()
+		{
+			Layers.Clear();
+			ActiveLayerIndex = -1;
 		}
 
 		public void MoveLayerUp(int index)

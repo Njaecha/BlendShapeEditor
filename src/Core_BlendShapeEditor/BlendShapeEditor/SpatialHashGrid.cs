@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace KKShapeEditor
+namespace BlendShapeEditor
 {
 	public class SpatialHashGrid
 	{

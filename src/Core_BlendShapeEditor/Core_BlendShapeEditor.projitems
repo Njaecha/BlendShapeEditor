@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <MSBuildAllProjects Condition="'$(MSBuildVersion)' == '' Or '$(MSBuildVersion)' &lt; '16.0'">$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
@@ -15,29 +15,23 @@
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\MoveTool.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\SelectionTool.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\SmoothTool.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\BlendShapeCreatorBridge.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\BlendShapeEditorCharaController.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\BlendShapeEditorSceneController.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Datamodels\DeformData.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Datamodels\DeformLayer.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Datamodels\ItemSaveData.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Datamodels\Serialization\ShapeSerializer.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Datamodels\SubmeshInfo.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Enums\FalloffMode.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Enums\GizmoAxis.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Enums\GizmoMode.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Enums\GizmoSpace.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Enums\GizmoEnums.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Enums\SelectionToolMode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Enums\SoftSelectMode.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\ItemShapeController.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\BlendShapeEditorItemController.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Extensions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\MeshHelper.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\ShapeDeformer.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\ShapeDeformerRunner.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\ShapeEditorCharacterController.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\ShapeEditorPlugin.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\ShapeEditorSceneController.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\BlendShapeEditorPlugin.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\SpatialHashGrid.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Translation\L.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\UI\Controls\FaceSelectOverlay.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\UI\Controls\InputHelper.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\UI\FileDialogue\FileDialogHelper.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\UI\MakerUI.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\UI\ShapeEditorWindow.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\UI\ShapePaintOverlay.cs" />
@@ -51,6 +45,5 @@
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Undo\LayerWeightUndoEntry.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Undo\UndoContext.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Undo\UndoStack.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\WeightRemapper.cs" />
   </ItemGroup>
 </Project>

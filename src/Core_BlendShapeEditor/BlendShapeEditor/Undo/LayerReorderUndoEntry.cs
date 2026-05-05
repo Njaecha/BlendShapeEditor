@@ -1,4 +1,4 @@
-namespace KKShapeEditor
+namespace BlendShapeEditor
 {
 	public class LayerReorderUndoEntry : IUndoEntry
 	{

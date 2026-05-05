@@ -3,9 +3,12 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
+using IllusionFixes;
+using KKAPI.Maker;
+using KKAPI.Studio;
 using UnityEngine;
 
-namespace KKShapeEditor
+namespace BlendShapeEditor
 {
 	public class InputHelper
 	{
@@ -47,6 +50,7 @@ namespace KKShapeEditor
 
 		public void PollInput()
 		{
+			
 			_prevMouseButton = MouseButton;
 			MouseButton = ((GetAsyncKeyState(VK_LBUTTON) & 32768) != 0);
 			MouseButtonR = ((GetAsyncKeyState(VK_RBUTTON) & 32768) != 0);
@@ -79,7 +83,6 @@ namespace KKShapeEditor
 			{
 				if (_cameraEnabled) return;
 				SetCameraEnabled(true);
-				SetCameraCollidersEnabled(true);
 				return;
 			}
 
@@ -104,52 +107,31 @@ namespace KKShapeEditor
 		private void FindCameraControls()
 		{
 			_cameraScripts.Clear();
-			_cameraColliders.Clear();
-			_cameraFound = false;
 
-			Camera main = Camera.main;
-			if (!main)
-				return;
-
-			foreach (MonoBehaviour mb in main.GetComponentsInParent<MonoBehaviour>(true))
+			if (StudioAPI.InsideStudio)
 			{
-				if (!mb)
-					continue;
-				if (mb.GetType().Name.IndexOf("CameraControl", StringComparison.OrdinalIgnoreCase) < 0)
-					continue;
-
-				_cameraScripts.Add(mb);
-				foreach (Collider col in mb.GetComponents<Collider>())
-				{
-					if (col && col.isTrigger)
-						_cameraColliders.Add(col);
-				}
+				Studio.CameraControl cameraCtrl = Studio.Studio.Instance?.cameraCtrl;
+				if (cameraCtrl) _cameraScripts.Add(cameraCtrl);
 			}
 
-			_cameraFound = _cameraScripts.Count > 0;
+			if (MakerAPI.InsideMaker)
+			{
+				CameraControl_Ver2 customCtrlVer2 = ChaCustom.CustomBase.Instance?.customCtrl?.camCtrl;
+				if (customCtrlVer2) _cameraScripts.Add(customCtrlVer2);
+				CursorManager cursorManager = BlendShapeEditorPlugin.Instance.gameObject.GetComponent<CursorManager>();
+				if (cursorManager) _cameraScripts.Add(cursorManager);
+			}
 		}
 
 		private void SetCameraEnabled(bool enabled)
 		{
 			_cameraEnabled = enabled;
-			foreach (MonoBehaviour mb in _cameraScripts.Where(mb => mb))
-			{
-				mb.enabled = enabled;
-			}
+			_cameraScripts.ForEach(md => md.enabled = enabled);
 		}
-
-		private void SetCameraCollidersEnabled(bool enabled)
-		{
-			foreach (Collider col in _cameraColliders.Where(col => col))
-			{
-				col.enabled = enabled;
-			}
-		}
-
+		
 		public void Cleanup()
 		{
 			SetCameraEnabled(true);
-			SetCameraCollidersEnabled(true);
 		}
 
 		private const int VK_LBUTTON = 1;
@@ -169,10 +151,9 @@ namespace KKShapeEditor
 		private bool _prevYKey;
 		private float _undoDebounceTime;
 		private float _redoDebounceTime;
+		// maker and studio use different camera control scripts
 		private readonly List<MonoBehaviour> _cameraScripts = new List<MonoBehaviour>();
-		private readonly List<Collider> _cameraColliders = new List<Collider>();
 		private bool _cameraEnabled = true;
-		private bool _cameraFound;
 		private static IntPtr _gameWindowHandle;
 
 		private struct POINT

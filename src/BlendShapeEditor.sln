@@ -20,5 +20,14 @@ Global
 		Core_BlendShapeEditor\Core_BlendShapeEditor.projitems*{f4505361-fdb1-4de5-acc5-85723a808be5}*SharedItemsImports = 13
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{F4505361-FDB1-4DE5-ACC5-85723A808BE5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F4505361-FDB1-4DE5-ACC5-85723A808BE5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{865FD8D2-AA6F-4429-902C-F32EBCF8F6BD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{865FD8D2-AA6F-4429-902C-F32EBCF8F6BD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5A580E73-AE8B-4A21-902E-0C27CAF93550}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5A580E73-AE8B-4A21-902E-0C27CAF93550}.Debug|Any CPU.Build.0 = Debug|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
 	EndGlobalSection
 EndGlobal

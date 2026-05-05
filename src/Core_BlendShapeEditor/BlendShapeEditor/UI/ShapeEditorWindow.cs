@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace KKShapeEditor
+namespace BlendShapeEditor
 {
 	public class ShapeEditorWindow
 	{
@@ -25,15 +25,14 @@ namespace KKShapeEditor
 		public int SoftSelectModeIndex { get; set; }
 		public float GizmoSoftRadius { get; set; }
 		public FalloffMode GizmoFalloff { get; set; }
-		public int SubdivideLevel { get; set; } = 1;
 		public bool IsEditMode { get; private set; }
 
 		public ShapeEditorWindow(int windowId, Rect initialRect)
 		{
 			_windowId = windowId;
 			_windowRect = initialRect;
-			BrushRadius = ShapeEditorPlugin.DefaultBrushRadius.Value;
-			BrushStrength = ShapeEditorPlugin.DefaultBrushStrength.Value;
+			BrushRadius = BlendShapeEditorPlugin.DefaultBrushRadius.Value;
+			BrushStrength = BlendShapeEditorPlugin.DefaultBrushStrength.Value;
 			GizmoSoftRadius = 0.1f;
 		}
 
@@ -55,7 +54,7 @@ namespace KKShapeEditor
 				return;
 
 			EnsureWindowStyle();
-			_windowRect = GUILayout.Window(_windowId, _windowRect, DrawWindow, "KKShapeEditor", _windowStyle, GUILayout.MinWidth(350f));
+			_windowRect = GUILayout.Window(_windowId, _windowRect, DrawWindow, "BlendShapeEditor", _windowStyle, GUILayout.MinWidth(350f));
 
 			if (_showHelp)
 			{
@@ -75,23 +74,19 @@ namespace KKShapeEditor
 			{
 				GUILayout.BeginVertical();
 				GUILayout.BeginHorizontal();
-				_tabIndex = GUILayout.Toolbar(_tabIndex, L.TabNames);
 				if (GUILayout.Button("?", GUILayout.Width(25f)))
 					_showHelp = !_showHelp;
 				GUILayout.EndHorizontal();
 				GUILayout.Space(5f);
 
-				if (_tabIndex == 0)
-					DrawShapeTab();
-				else if (_tabIndex == 1)
-					DrawSubdivideTab();
+				DrawShapeTab();
 
 				GUILayout.EndVertical();
 			}
 			catch (Exception ex)
 			{
 				GUILayout.EndVertical();
-				ShapeEditorPlugin.Logger.LogWarning("GUI draw error: " + ex.Message);
+				BlendShapeEditorPlugin.Logger.LogWarning("GUI draw error: " + ex.Message);
 			}
 			GUI.DragWindow();
 		}
@@ -102,9 +97,7 @@ namespace KKShapeEditor
 				_helpLabelStyle = new GUIStyle(GUI.skin.label) { wordWrap = true };
 
 			_helpScroll = GUILayout.BeginScrollView(_helpScroll);
-			string text = _tabIndex == 0
-				? (OperationMode == OpMode.Brush ? L.HelpBrush : L.HelpGizmo)
-				: L.HelpSubdivide;
+			string text = OperationMode == OpMode.Brush ? L.HelpBrush : L.HelpGizmo;
 			GUILayout.Label(text, _helpLabelStyle);
 			GUILayout.EndScrollView();
 		}
@@ -117,12 +110,8 @@ namespace KKShapeEditor
 
 			if (!IsEditMode)
 			{
-				bool prev = GUI.enabled;
-				if (FaceSelect)
-					GUI.enabled = false;
 				if (GUILayout.Button(L.EnterEditMode))
 					DeferEnterEditMode = true;
-				GUI.enabled = prev;
 				return;
 			}
 
@@ -152,31 +141,28 @@ namespace KKShapeEditor
 
 			GUILayout.Space(8f);
 			DrawLayerPanel(activeDeformData);
-
-			if (IsOnCharacter)
-				DrawWeightRemapControls();
+			GUILayout.Space(5f);
+			DrawBakeControls();
 		}
 
-		private void DrawWeightRemapControls()
+		private void DrawBakeControls()
 		{
-			GUILayout.Space(5f);
+			GUILayout.Label(L.BakeHeader);
 			GUILayout.BeginHorizontal();
-			bool prev = GUI.enabled;
-			if (!BodyMeshReadable)
-			{
-				GUI.enabled = false;
-				GUILayout.Button(L.RemapWeights);
-				GUI.enabled = prev;
-			}
-			else if (GUILayout.Button(L.RemapWeights))
-			{
-				DeferRemapWeights = true;
-			}
-			if (GUILayout.Button(L.RestoreWeights))
-				DeferRestoreWeights = true;
+			GUILayout.Label(L.BakeNameLabel, GUILayout.Width(45f));
+			_bakeNameInput = GUILayout.TextField(_bakeNameInput);
 			GUILayout.EndHorizontal();
-			if (!BodyMeshReadable)
-				GUILayout.Label(L.BodyMeshNotReadable);
+
+			bool hasLayers = ActiveDeformData != null && ActiveDeformData.HasLayers;
+			bool prev = GUI.enabled;
+			if (!hasLayers || !IsEditMode)
+				GUI.enabled = false;
+			if (GUILayout.Button(L.BakeButton))
+			{
+				BakeShapeName = _bakeNameInput;
+				DeferBake = true;
+			}
+			GUI.enabled = prev;
 		}
 
 		private void DrawBrushControls()
@@ -357,114 +343,6 @@ namespace KKShapeEditor
 			GUILayout.EndHorizontal();
 		}
 
-		private void DrawSubdivideTab()
-		{
-			DrawRendererSelection();
-			if (SelectedRendererIndex < 0 || SelectedRendererIndex >= Renderers.Count)
-				return;
-
-			Renderer renderer = Renderers[SelectedRendererIndex];
-			if (!renderer)
-				return;
-
-			Mesh mesh = GetMeshFromRenderer(renderer);
-			if (!mesh)
-				return;
-
-			int totalFaces = MeshHelper.GetTotalFaceCount(mesh);
-			GUILayout.Label(string.Format(L.VerticesFacesFmt, mesh.vertexCount, totalFaces));
-			GUILayout.Space(5f);
-
-			bool faceSelectActive = FaceSelect;
-			bool prev = GUI.enabled;
-			if (IsEditMode)
-				GUI.enabled = false;
-			bool newFaceSelectActive = GUILayout.Toggle(faceSelectActive, L.SelectFaces);
-			if (IsEditMode)
-				GUI.enabled = prev;
-
-			if (newFaceSelectActive != faceSelectActive)
-			{
-				if (newFaceSelectActive)
-				{
-					FaceSelect = FaceSelectOverlay.Create(renderer);
-				}
-				else if (FaceSelect)
-				{
-					UnityEngine.Object.Destroy(FaceSelect.gameObject);
-					FaceSelect = null;
-				}
-			}
-
-			if (FaceSelect)
-			{
-				GUILayout.BeginHorizontal();
-				if (GUILayout.Toggle(!FaceSelect.BoxSelectMode, L.Brush, "Button"))
-					FaceSelect.BoxSelectMode = false;
-				if (GUILayout.Toggle(FaceSelect.BoxSelectMode, L.BoxSelect, "Button"))
-					FaceSelect.BoxSelectMode = true;
-				GUILayout.EndHorizontal();
-
-				if (!FaceSelect.BoxSelectMode)
-				{
-					GUILayout.Label(string.Format(L.BrushRadiusFmt, FaceSelect.BrushRadius.ToString("F3")));
-					FaceSelect.BrushRadius = GUILayout.HorizontalSlider(FaceSelect.BrushRadius, 0.001f, 0.5f);
-				}
-
-				GUILayout.Label(string.Format(L.SelectedFacesFmt, FaceSelect.SelectedFaces.Count, FaceSelect.TotalFaces));
-				GUILayout.BeginHorizontal();
-				if (GUILayout.Button(L.AllButton, GUILayout.Width(40f)))
-					DeferFaceSelectAll = true;
-				if (GUILayout.Button(L.NoneButton, GUILayout.Width(50f)))
-					DeferFaceSelectNone = true;
-				if (GUILayout.Button(L.InvertButton, GUILayout.Width(55f)))
-					DeferFaceSelectInvert = true;
-				GUILayout.EndHorizontal();
-			}
-
-			GUILayout.Space(3f);
-			if (IsEditMode)
-				GUI.enabled = false;
-
-			GUILayout.BeginHorizontal();
-			GUILayout.Label(L.LevelLabel, GUILayout.Width(40f));
-			if (GUILayout.Toggle(SubdivideLevel == 1, "1", "Button", GUILayout.Width(30f)))
-				SubdivideLevel = 1;
-			if (GUILayout.Toggle(SubdivideLevel == 2, "2", "Button", GUILayout.Width(30f)))
-				SubdivideLevel = 2;
-			if (GUILayout.Toggle(SubdivideLevel == 3, "3", "Button", GUILayout.Width(30f)))
-				SubdivideLevel = 3;
-
-			if (GUILayout.Button(L.Subdivide, GUILayout.Width(80f)))
-			{
-				if (ActiveDeformData != null && ActiveDeformData.HasLayers)
-					ShowSubdivideLayerWarning = true;
-				else
-					DeferSubdivide = true;
-			}
-			if (MeshHelper.HasOriginal(renderer) && GUILayout.Button(L.Restore, GUILayout.Width(70f)))
-				DeferRestore = true;
-			GUILayout.EndHorizontal();
-
-			if (IsEditMode)
-				GUI.enabled = prev;
-
-			if (ShowSubdivideLayerWarning)
-			{
-				GUILayout.Space(5f);
-				GUILayout.Label(L.SubdivideLayerWarning);
-				GUILayout.BeginHorizontal();
-				if (GUILayout.Button(L.ApplyButton, GUILayout.Width(80f)))
-				{
-					ShowSubdivideLayerWarning = false;
-					DeferSubdivide = true;
-				}
-				if (GUILayout.Button(L.ClearButton, GUILayout.Width(80f)))
-					ShowSubdivideLayerWarning = false;
-				GUILayout.EndHorizontal();
-			}
-		}
-
 		private void DrawRendererSelection()
 		{
 			if (Renderers.Count == 0)
@@ -489,49 +367,43 @@ namespace KKShapeEditor
 					continue;
 				if (filtering && Renderers[i].name.IndexOf(_rendererFilter, StringComparison.OrdinalIgnoreCase) < 0)
 					continue;
-				if (GUILayout.Toggle(SelectedRendererIndex == i, Renderers[i].name, "Button"))
+				string name = Renderers[i].name;
+				if (!(Renderers[i] is SkinnedMeshRenderer smr))
+				{
+					name += " (NOT SKINNED)";
+					GUI.enabled = false;
+				}
+				Color guic = GUI.color;
+				if (SelectedRendererIndex == i) GUI.color = Color.cyan;
+				if (GUILayout.Toggle(SelectedRendererIndex == i, name, "Button"))
 					SelectedRendererIndex = i;
+				GUI.color = guic;
+				GUI.enabled = true;
 			}
 			GUILayout.EndScrollView();
 
 			if (IsEditMode)
 				GUI.enabled = prev;
-
-			GUILayout.BeginHorizontal();
-			bool hasLayers = ActiveDeformData != null && ActiveDeformData.Layers.Count > 0;
-			bool prev2 = GUI.enabled;
-			if (!hasLayers)
-				GUI.enabled = false;
-			if (GUILayout.Button(L.ExportDeform))
-				DeferExport = true;
-			GUI.enabled = prev2;
-
-			bool rendererValid = SelectedRendererIndex >= 0 && SelectedRendererIndex < Renderers.Count && Renderers[SelectedRendererIndex] != null;
-			bool prev3 = GUI.enabled;
-			if (!rendererValid || !IsEditMode)
-				GUI.enabled = false;
-			if (GUILayout.Button(L.ImportDeform))
-				DeferImport = true;
-			GUI.enabled = prev3;
-			GUILayout.EndHorizontal();
 		}
 
-		private static Mesh GetMeshFromRenderer(Renderer r)
+		public void IncrementBakeShapeName()
 		{
-			SkinnedMeshRenderer smr = r as SkinnedMeshRenderer;
-			if (smr)
-				return smr.sharedMesh;
-			MeshFilter mf = r.GetComponent<MeshFilter>();
-			return mf ? mf.sharedMesh : null;
+			string name = BakeShapeName;
+			int underscoreIdx = name.LastIndexOf('_');
+			if (underscoreIdx >= 0 && int.TryParse(name.Substring(underscoreIdx + 1), out int n))
+			{
+				name = name.Substring(0, underscoreIdx + 1) + (n + 1).ToString();
+			}
+			else
+			{
+				name = name + "_2";
+			}
+			BakeShapeName = name;
+			_bakeNameInput = name;
 		}
 
 		public void Cleanup()
 		{
-			if (FaceSelect)
-			{
-				UnityEngine.Object.Destroy(FaceSelect.gameObject);
-				FaceSelect = null;
-			}
 			if (_bgTex)
 			{
 				UnityEngine.Object.Destroy(_bgTex);
@@ -568,29 +440,21 @@ namespace KKShapeEditor
 		private Rect _helpWindowRect;
 		private Vector2 _helpScroll;
 		private GUIStyle _helpLabelStyle;
-		private int _tabIndex;
 		private Vector2 _layerScroll;
 		private Vector2 _rendererScroll;
 		private string _rendererFilter = "";
 		private int _renamingLayerIndex = -1;
 		private string _renamingText = "";
+		private string _bakeNameInput = "BSE_Shape";
 
 		public bool DeferEnterEditMode;
 		public bool DeferExitEditMode;
-		public bool DeferSubdivide;
-		public bool DeferRestore;
-		public bool DeferFaceSelectAll;
-		public bool DeferFaceSelectNone;
-		public bool DeferFaceSelectInvert;
 		public bool DeferLayerAdd;
 		public int DeferLayerRemove = -1;
-		public bool DeferSubdivideLayerWarningConfirm;
 		public int DeferLayerMoveUp = -1;
 		public int DeferLayerMoveDown = -1;
-		public bool DeferRemapWeights;
-		public bool DeferRestoreWeights;
-		public bool DeferExport;
-		public bool DeferImport;
+		public bool DeferBake;
+		public string BakeShapeName = "BSE_Shape";
 
 		private int _weightSliderLayer = -1;
 		private float _weightSliderBefore;
@@ -599,13 +463,9 @@ namespace KKShapeEditor
 		public float WeightUndoAfter;
 
 		public List<Renderer> Renderers = new List<Renderer>();
-		public int SelectedRendererIndex;
+		public int SelectedRendererIndex = -1;
 		public DeformData ActiveDeformData;
-		public FaceSelectOverlay FaceSelect;
 		public int VertexCount;
-		public bool ShowSubdivideLayerWarning;
-		public bool BodyMeshReadable;
-		public bool IsOnCharacter;
 
 		public enum OpMode
 		{

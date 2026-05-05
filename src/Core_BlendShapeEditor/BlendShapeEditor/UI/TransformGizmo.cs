@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-namespace KKShapeEditor
+namespace BlendShapeEditor
 {
 	public class TransformGizmo
 	{
@@ -14,7 +14,7 @@ namespace KKShapeEditor
 		public FalloffMode SoftFalloff { get; set; } = FalloffMode.Smooth;
 		public float SharpExponent { get; set; } = 3f;
 		public SoftSelectMode SoftMode { get; set; }
-		public GizmoAxis HoveredAxis => _hoveredAxis;
+		public GizmoEnums HoveredAxis => _hoveredAxis;
 		public bool IsDragging => _isDragging;
 		public bool HasTarget => _targetIndices != null && _targetIndices.Count > 0;
 		public Vector3 CentroidLocal => _centroid;
@@ -38,7 +38,7 @@ namespace KKShapeEditor
 			_mirrorIndices = null;
 			_mirrorWeights.Clear();
 			_combinedSoftWeights.Clear();
-			_hoveredAxis = GizmoAxis.None;
+			_hoveredAxis = GizmoEnums.None;
 
 			if (indices == null || indices.Count == 0 || vertices == null)
 			{
@@ -355,7 +355,7 @@ namespace KKShapeEditor
 		{
 			if (!HasTarget || !cam)
 			{
-				_hoveredAxis = GizmoAxis.None;
+				_hoveredAxis = GizmoEnums.None;
 				return;
 			}
 			if (_isDragging)
@@ -371,15 +371,15 @@ namespace KKShapeEditor
 				float freeRadius = Vector2.Distance(WorldToScreen(cam, centroidWorld), WorldToScreen(cam, freeCorner));
 				if (Vector2.Distance(mouseScreen, WorldToScreen(cam, centroidWorld)) <= freeRadius)
 				{
-					_hoveredAxis = GizmoAxis.Free;
+					_hoveredAxis = GizmoEnums.Free;
 					return;
 				}
 			}
 
 			if (Mode == GizmoMode.Translate)
 			{
-				GizmoAxis planeHit = TestPlaneHandleHit(mouseScreen, cam, centroidWorld, xform, s);
-				if (planeHit != GizmoAxis.None)
+				GizmoEnums planeHit = TestPlaneHandleHit(mouseScreen, cam, centroidWorld, xform, s);
+				if (planeHit != GizmoEnums.None)
 				{
 					_hoveredAxis = planeHit;
 					return;
@@ -387,26 +387,26 @@ namespace KKShapeEditor
 			}
 
 			var bestDist = 14f;
-			GizmoAxis hoveredAxis = GizmoAxis.None;
+			GizmoEnums hoveredAxis = GizmoEnums.None;
 			if (Mode == GizmoMode.Rotate)
 			{
-				TestRingHit(mouseScreen, cam, centroidWorld, cam.transform.forward, s, ref bestDist, ref hoveredAxis, GizmoAxis.ViewRotate, 1.1f);
-				TestRingHit(mouseScreen, cam, centroidWorld, AxisW(GizmoAxis.X, xform), s, ref bestDist, ref hoveredAxis, GizmoAxis.X, 0.85f);
-				TestRingHit(mouseScreen, cam, centroidWorld, AxisW(GizmoAxis.Y, xform), s, ref bestDist, ref hoveredAxis, GizmoAxis.Y, 0.85f);
-				TestRingHit(mouseScreen, cam, centroidWorld, AxisW(GizmoAxis.Z, xform), s, ref bestDist, ref hoveredAxis, GizmoAxis.Z, 0.85f);
+				TestRingHit(mouseScreen, cam, centroidWorld, cam.transform.forward, s, ref bestDist, ref hoveredAxis, GizmoEnums.ViewRotate, 1.1f);
+				TestRingHit(mouseScreen, cam, centroidWorld, AxisW(GizmoEnums.X, xform), s, ref bestDist, ref hoveredAxis, GizmoEnums.X, 0.85f);
+				TestRingHit(mouseScreen, cam, centroidWorld, AxisW(GizmoEnums.Y, xform), s, ref bestDist, ref hoveredAxis, GizmoEnums.Y, 0.85f);
+				TestRingHit(mouseScreen, cam, centroidWorld, AxisW(GizmoEnums.Z, xform), s, ref bestDist, ref hoveredAxis, GizmoEnums.Z, 0.85f);
 			}
 			else
 			{
-				TestAxisHit(mouseScreen, cam, centroidWorld, AxisW(GizmoAxis.X, xform), s, ref bestDist, ref hoveredAxis, GizmoAxis.X);
-				TestAxisHit(mouseScreen, cam, centroidWorld, AxisW(GizmoAxis.Y, xform), s, ref bestDist, ref hoveredAxis, GizmoAxis.Y);
-				TestAxisHit(mouseScreen, cam, centroidWorld, AxisW(GizmoAxis.Z, xform), s, ref bestDist, ref hoveredAxis, GizmoAxis.Z);
+				TestAxisHit(mouseScreen, cam, centroidWorld, AxisW(GizmoEnums.X, xform), s, ref bestDist, ref hoveredAxis, GizmoEnums.X);
+				TestAxisHit(mouseScreen, cam, centroidWorld, AxisW(GizmoEnums.Y, xform), s, ref bestDist, ref hoveredAxis, GizmoEnums.Y);
+				TestAxisHit(mouseScreen, cam, centroidWorld, AxisW(GizmoEnums.Z, xform), s, ref bestDist, ref hoveredAxis, GizmoEnums.Z);
 			}
 			_hoveredAxis = hoveredAxis;
 		}
 
-		private GizmoAxis TestPlaneHandleHit(Vector2 mp, Camera cam, Vector3 wc, Transform xform, float s)
+		private GizmoEnums TestPlaneHandleHit(Vector2 mp, Camera cam, Vector3 wc, Transform xform, float s)
 		{
-			var planes = new GizmoAxis[] { GizmoAxis.XY, GizmoAxis.XZ, GizmoAxis.YZ };
+			var planes = new GizmoEnums[] { GizmoEnums.XY, GizmoEnums.XZ, GizmoEnums.YZ };
 			for (var i = 0; i < 3; i++)
 			{
 				GetPlaneAxes(planes[i], xform, out Vector3 ax1, out Vector3 ax2);
@@ -417,31 +417,31 @@ namespace KKShapeEditor
 				if (PointInQuad(mp, a, b, c, d))
 					return planes[i];
 			}
-			return GizmoAxis.None;
+			return GizmoEnums.None;
 		}
 
-		private void GetPlaneAxes(GizmoAxis plane, Transform xform, out Vector3 ax1, out Vector3 ax2)
+		private void GetPlaneAxes(GizmoEnums plane, Transform xform, out Vector3 ax1, out Vector3 ax2)
 		{
 			switch (plane)
 			{
-				case GizmoAxis.XY:
-					ax1 = AxisW(GizmoAxis.X, xform);
-					ax2 = AxisW(GizmoAxis.Y, xform);
+				case GizmoEnums.XY:
+					ax1 = AxisW(GizmoEnums.X, xform);
+					ax2 = AxisW(GizmoEnums.Y, xform);
 					break;
-				case GizmoAxis.XZ:
-					ax1 = AxisW(GizmoAxis.X, xform);
-					ax2 = AxisW(GizmoAxis.Z, xform);
+				case GizmoEnums.XZ:
+					ax1 = AxisW(GizmoEnums.X, xform);
+					ax2 = AxisW(GizmoEnums.Z, xform);
 					break;
-				case GizmoAxis.None:
-				case GizmoAxis.X:
-				case GizmoAxis.Y:
-				case GizmoAxis.Z:
-				case GizmoAxis.YZ:
-				case GizmoAxis.Free:
-				case GizmoAxis.ViewRotate:
+				case GizmoEnums.None:
+				case GizmoEnums.X:
+				case GizmoEnums.Y:
+				case GizmoEnums.Z:
+				case GizmoEnums.YZ:
+				case GizmoEnums.Free:
+				case GizmoEnums.ViewRotate:
 				default:
-					ax1 = AxisW(GizmoAxis.Y, xform);
-					ax2 = AxisW(GizmoAxis.Z, xform);
+					ax1 = AxisW(GizmoEnums.Y, xform);
+					ax2 = AxisW(GizmoEnums.Z, xform);
 					break;
 			}
 		}
@@ -466,7 +466,7 @@ namespace KKShapeEditor
 			return a.x * b.y - a.y * b.x;
 		}
 
-		private void TestAxisHit(Vector2 mp, Camera cam, Vector3 c, Vector3 dir, float s, ref float best, ref GizmoAxis bestA, GizmoAxis axis)
+		private void TestAxisHit(Vector2 mp, Camera cam, Vector3 c, Vector3 dir, float s, ref float best, ref GizmoEnums bestA, GizmoEnums axis)
 		{
 			Vector2 a = WorldToScreen(cam, c);
 			Vector2 b = WorldToScreen(cam, c + AXIS_LEN * s * dir);
@@ -476,7 +476,7 @@ namespace KKShapeEditor
 			bestA = axis;
 		}
 
-		private void TestRingHit(Vector2 mp, Camera cam, Vector3 c, Vector3 normal, float s, ref float best, ref GizmoAxis bestA, GizmoAxis axis, float ringRadius)
+		private void TestRingHit(Vector2 mp, Camera cam, Vector3 c, Vector3 normal, float s, ref float best, ref GizmoEnums bestA, GizmoEnums axis, float ringRadius)
 		{
 			Perpendiculars(normal, out Vector3 tan, out Vector3 bin);
 			float r = ringRadius * s;
@@ -497,7 +497,7 @@ namespace KKShapeEditor
 
 		public bool BeginDrag(Vector2 mouseScreen, Camera cam, Transform xform, DeformLayer layer, Vector3[] vertices)
 		{
-			if (_hoveredAxis == GizmoAxis.None || !HasTarget || layer == null)
+			if (_hoveredAxis == GizmoEnums.None || !HasTarget || layer == null)
 				return false;
 
 			_activeAxis = _hoveredAxis;
@@ -559,7 +559,7 @@ namespace KKShapeEditor
 		public void EndDrag()
 		{
 			_isDragging = false;
-			_activeAxis = GizmoAxis.None;
+			_activeAxis = GizmoEnums.None;
 		}
 
 		private void ApplyTranslate(Vector2 ms, Camera cam, Transform xform, Vector3[] deltas)
@@ -567,26 +567,26 @@ namespace KKShapeEditor
 			Vector3 dispWorld;
 			switch (_activeAxis)
 			{
-				case GizmoAxis.Free:
+				case GizmoEnums.Free:
 				{
 					Vector3 startHit = RayPlaneIntersect(cam, _dragStartScreen, _dragStartCentroidWorld, cam.transform.forward);
 					dispWorld = RayPlaneIntersect(cam, ms, _dragStartCentroidWorld, cam.transform.forward) - startHit;
 					break;
 				}
-				case GizmoAxis.XY:
-				case GizmoAxis.XZ:
-				case GizmoAxis.YZ:
+				case GizmoEnums.XY:
+				case GizmoEnums.XZ:
+				case GizmoEnums.YZ:
 				{
 					Vector3 planeNormal = GetPlaneNormal(_activeAxis, xform);
 					Vector3 startHit = RayPlaneIntersect(cam, _dragStartScreen, _dragStartCentroidWorld, planeNormal);
 					dispWorld = RayPlaneIntersect(cam, ms, _dragStartCentroidWorld, planeNormal) - startHit;
 					break;
 				}
-				case GizmoAxis.None:
-				case GizmoAxis.X:
-				case GizmoAxis.Y:
-				case GizmoAxis.Z:
-				case GizmoAxis.ViewRotate:
+				case GizmoEnums.None:
+				case GizmoEnums.X:
+				case GizmoEnums.Y:
+				case GizmoEnums.Z:
+				case GizmoEnums.ViewRotate:
 				default:
 				{
 					Vector3 axisDir = AxisW(_activeAxis, xform);
@@ -633,7 +633,7 @@ namespace KKShapeEditor
 
 		private void ApplyRotate(Vector2 ms, Camera cam, Transform xform, Vector3[] deltas)
 		{
-			if (_activeAxis == GizmoAxis.Free || _activeAxis == GizmoAxis.None)
+			if (_activeAxis == GizmoEnums.Free || _activeAxis == GizmoEnums.None)
 				return;
 
 			Vector2 centroidScreen = WorldToScreen(cam, _dragStartCentroidWorld);
@@ -645,7 +645,7 @@ namespace KKShapeEditor
 			float angle = Mathf.Atan2(toVec.y, toVec.x) - Mathf.Atan2(fromVec.y, fromVec.x);
 			angle *= -Mathf.Rad2Deg;
 
-			Vector3 axisWorld = _activeAxis == GizmoAxis.ViewRotate ? cam.transform.forward : AxisW(_activeAxis, xform);
+			Vector3 axisWorld = _activeAxis == GizmoEnums.ViewRotate ? cam.transform.forward : AxisW(_activeAxis, xform);
 			if (Vector3.Dot(axisWorld, cam.transform.forward) > 0f)
 				angle = -angle;
 
@@ -669,7 +669,7 @@ namespace KKShapeEditor
 		{
 			float factor;
 			bool uniform;
-			if (_activeAxis == GizmoAxis.Free)
+			if (_activeAxis == GizmoEnums.Free)
 			{
 				Vector2 centroidScreen = WorldToScreen(cam, _dragStartCentroidWorld);
 				float startDist = Mathf.Max(Vector2.Distance(_dragStartScreen, centroidScreen), 1f);
@@ -809,31 +809,31 @@ namespace KKShapeEditor
 			switch (Mode)
 			{
 				case GizmoMode.Translate:
-					DrawAxisLine(centroidWorld, AxisW(GizmoAxis.X, xform), scale, GetColor(GizmoAxis.X));
-					DrawAxisLine(centroidWorld, AxisW(GizmoAxis.Y, xform), scale, GetColor(GizmoAxis.Y));
-					DrawAxisLine(centroidWorld, AxisW(GizmoAxis.Z, xform), scale, GetColor(GizmoAxis.Z));
-					DrawArrowHead(centroidWorld, AxisW(GizmoAxis.X, xform), scale, GetColor(GizmoAxis.X));
-					DrawArrowHead(centroidWorld, AxisW(GizmoAxis.Y, xform), scale, GetColor(GizmoAxis.Y));
-					DrawArrowHead(centroidWorld, AxisW(GizmoAxis.Z, xform), scale, GetColor(GizmoAxis.Z));
-					DrawPlaneHandle(centroidWorld, xform, scale, GizmoAxis.XY);
-					DrawPlaneHandle(centroidWorld, xform, scale, GizmoAxis.XZ);
-					DrawPlaneHandle(centroidWorld, xform, scale, GizmoAxis.YZ);
-					DrawCenterCube(centroidWorld, gizmoRot, scale, GetColor(GizmoAxis.Free));
+					DrawAxisLine(centroidWorld, AxisW(GizmoEnums.X, xform), scale, GetColor(GizmoEnums.X));
+					DrawAxisLine(centroidWorld, AxisW(GizmoEnums.Y, xform), scale, GetColor(GizmoEnums.Y));
+					DrawAxisLine(centroidWorld, AxisW(GizmoEnums.Z, xform), scale, GetColor(GizmoEnums.Z));
+					DrawArrowHead(centroidWorld, AxisW(GizmoEnums.X, xform), scale, GetColor(GizmoEnums.X));
+					DrawArrowHead(centroidWorld, AxisW(GizmoEnums.Y, xform), scale, GetColor(GizmoEnums.Y));
+					DrawArrowHead(centroidWorld, AxisW(GizmoEnums.Z, xform), scale, GetColor(GizmoEnums.Z));
+					DrawPlaneHandle(centroidWorld, xform, scale, GizmoEnums.XY);
+					DrawPlaneHandle(centroidWorld, xform, scale, GizmoEnums.XZ);
+					DrawPlaneHandle(centroidWorld, xform, scale, GizmoEnums.YZ);
+					DrawCenterCube(centroidWorld, gizmoRot, scale, GetColor(GizmoEnums.Free));
 					break;
 				case GizmoMode.Rotate:
-					DrawRing(centroidWorld, AxisW(GizmoAxis.X, xform), scale, GetColor(GizmoAxis.X), RING_RAD);
-					DrawRing(centroidWorld, AxisW(GizmoAxis.Y, xform), scale, GetColor(GizmoAxis.Y), RING_RAD);
-					DrawRing(centroidWorld, AxisW(GizmoAxis.Z, xform), scale, GetColor(GizmoAxis.Z), RING_RAD);
-					DrawRing(centroidWorld, cam.transform.forward, scale, GetColor(GizmoAxis.ViewRotate), VIEW_RING_RAD);
+					DrawRing(centroidWorld, AxisW(GizmoEnums.X, xform), scale, GetColor(GizmoEnums.X), RING_RAD);
+					DrawRing(centroidWorld, AxisW(GizmoEnums.Y, xform), scale, GetColor(GizmoEnums.Y), RING_RAD);
+					DrawRing(centroidWorld, AxisW(GizmoEnums.Z, xform), scale, GetColor(GizmoEnums.Z), RING_RAD);
+					DrawRing(centroidWorld, cam.transform.forward, scale, GetColor(GizmoEnums.ViewRotate), VIEW_RING_RAD);
 					break;
 				case GizmoMode.Scale:
-					DrawAxisLine(centroidWorld, AxisW(GizmoAxis.X, xform), scale, GetColor(GizmoAxis.X));
-					DrawAxisLine(centroidWorld, AxisW(GizmoAxis.Y, xform), scale, GetColor(GizmoAxis.Y));
-					DrawAxisLine(centroidWorld, AxisW(GizmoAxis.Z, xform), scale, GetColor(GizmoAxis.Z));
-					DrawCubeEnd(centroidWorld, GizmoAxis.X, gizmoRot, scale, GetColor(GizmoAxis.X));
-					DrawCubeEnd(centroidWorld, GizmoAxis.Y, gizmoRot, scale, GetColor(GizmoAxis.Y));
-					DrawCubeEnd(centroidWorld, GizmoAxis.Z, gizmoRot, scale, GetColor(GizmoAxis.Z));
-					DrawCenterCube(centroidWorld, gizmoRot, scale, GetColor(GizmoAxis.Free));
+					DrawAxisLine(centroidWorld, AxisW(GizmoEnums.X, xform), scale, GetColor(GizmoEnums.X));
+					DrawAxisLine(centroidWorld, AxisW(GizmoEnums.Y, xform), scale, GetColor(GizmoEnums.Y));
+					DrawAxisLine(centroidWorld, AxisW(GizmoEnums.Z, xform), scale, GetColor(GizmoEnums.Z));
+					DrawCubeEnd(centroidWorld, GizmoEnums.X, gizmoRot, scale, GetColor(GizmoEnums.X));
+					DrawCubeEnd(centroidWorld, GizmoEnums.Y, gizmoRot, scale, GetColor(GizmoEnums.Y));
+					DrawCubeEnd(centroidWorld, GizmoEnums.Z, gizmoRot, scale, GetColor(GizmoEnums.Z));
+					DrawCenterCube(centroidWorld, gizmoRot, scale, GetColor(GizmoEnums.Free));
 					break;
 				default:
 					throw new ArgumentOutOfRangeException();
@@ -899,7 +899,7 @@ namespace KKShapeEditor
 			GL.End();
 		}
 
-		private void DrawPlaneHandle(Vector3 wc, Transform xform, float scale, GizmoAxis plane)
+		private void DrawPlaneHandle(Vector3 wc, Transform xform, float scale, GizmoEnums plane)
 		{
 			GetPlaneAxes(plane, xform, out Vector3 ax1, out Vector3 ax2);
 			Color col = GetColor(plane);
@@ -922,18 +922,18 @@ namespace KKShapeEditor
 			GL.End();
 		}
 
-		private Vector3 GetPlaneNormal(GizmoAxis plane, Transform xform)
+		private Vector3 GetPlaneNormal(GizmoEnums plane, Transform xform)
 		{
 			switch (plane)
 			{
-				case GizmoAxis.XY: return AxisW(GizmoAxis.Z, xform);
-				case GizmoAxis.XZ: return AxisW(GizmoAxis.Y, xform);
-				case GizmoAxis.YZ: return AxisW(GizmoAxis.X, xform);
+				case GizmoEnums.XY: return AxisW(GizmoEnums.Z, xform);
+				case GizmoEnums.XZ: return AxisW(GizmoEnums.Y, xform);
+				case GizmoEnums.YZ: return AxisW(GizmoEnums.X, xform);
 				default: return Vector3.up;
 			}
 		}
 
-		private void DrawCubeEnd(Vector3 center, GizmoAxis axis, Quaternion gizmoRot, float scale, Color col)
+		private void DrawCubeEnd(Vector3 center, GizmoEnums axis, Quaternion gizmoRot, float scale, Color col)
 		{
 			Vector3 axisDir = gizmoRot * BaseDir(axis);
 			Vector3 cubeCenter = center + AXIS_LEN * scale * axisDir;
@@ -1021,12 +1021,12 @@ namespace KKShapeEditor
 			return Quaternion.identity;
 		}
 
-		private Vector3 AxisW(GizmoAxis axis, Transform xform)
+		private Vector3 AxisW(GizmoEnums axis, Transform xform)
 		{
 			return GizmoRotation(xform) * BaseDir(axis);
 		}
 
-		private Vector3 AxisL(GizmoAxis axis, Transform xform)
+		private Vector3 AxisL(GizmoEnums axis, Transform xform)
 		{
 			Vector3 dir = BaseDir(axis);
 			switch (Space)
@@ -1063,22 +1063,22 @@ namespace KKShapeEditor
 			return true;
 		}
 
-		private Color GetColor(GizmoAxis axis)
+		private Color GetColor(GizmoEnums axis)
 		{
 			if (axis == _hoveredAxis || axis == _activeAxis)
 				return COL_HOVER;
 
 			switch (axis)
 			{
-				case GizmoAxis.X: return COL_X;
-				case GizmoAxis.Y: return COL_Y;
-				case GizmoAxis.Z:
-				case GizmoAxis.XY: return COL_Z;
-				case GizmoAxis.XZ: return COL_Y;
-				case GizmoAxis.YZ: return COL_X;
-				case GizmoAxis.ViewRotate: return COL_VIEW;
-				case GizmoAxis.None:
-				case GizmoAxis.Free:
+				case GizmoEnums.X: return COL_X;
+				case GizmoEnums.Y: return COL_Y;
+				case GizmoEnums.Z:
+				case GizmoEnums.XY: return COL_Z;
+				case GizmoEnums.XZ: return COL_Y;
+				case GizmoEnums.YZ: return COL_X;
+				case GizmoEnums.ViewRotate: return COL_VIEW;
+				case GizmoEnums.None:
+				case GizmoEnums.Free:
 				default: return COL_FREE;
 			}
 		}
@@ -1088,19 +1088,19 @@ namespace KKShapeEditor
 			return Vector3.Distance(cam.transform.position, worldPos) * SCREEN_SCALE;
 		}
 
-		private static Vector3 BaseDir(GizmoAxis axis)
+		private static Vector3 BaseDir(GizmoEnums axis)
 		{
 			switch (axis)
 			{
-				case GizmoAxis.X: return Vector3.right;
-				case GizmoAxis.Y: return Vector3.up;
-				case GizmoAxis.Z: return Vector3.forward;
-				case GizmoAxis.None:
-				case GizmoAxis.XY:
-				case GizmoAxis.XZ:
-				case GizmoAxis.YZ:
-				case GizmoAxis.Free:
-				case GizmoAxis.ViewRotate:
+				case GizmoEnums.X: return Vector3.right;
+				case GizmoEnums.Y: return Vector3.up;
+				case GizmoEnums.Z: return Vector3.forward;
+				case GizmoEnums.None:
+				case GizmoEnums.XY:
+				case GizmoEnums.XZ:
+				case GizmoEnums.YZ:
+				case GizmoEnums.Free:
+				case GizmoEnums.ViewRotate:
 				default: return Vector3.zero;
 			}
 		}
@@ -1153,8 +1153,8 @@ namespace KKShapeEditor
 		private Vector3 _dragStartMirrorCentroidWorld;
 		private Quaternion _localOrientation = Quaternion.identity;
 		private Transform _objectRoot;
-		private GizmoAxis _hoveredAxis;
-		private GizmoAxis _activeAxis;
+		private GizmoEnums _hoveredAxis;
+		private GizmoEnums _activeAxis;
 		private bool _isDragging;
 		private Vector2 _dragStartScreen;
 		private Vector3 _dragStartCentroidWorld;

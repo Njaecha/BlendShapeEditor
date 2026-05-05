@@ -4,7 +4,7 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace KKShapeEditor
+namespace BlendShapeEditor
 {
 	public class ShapeDeformer : MonoBehaviour
 	{
@@ -17,35 +17,9 @@ namespace KKShapeEditor
 
 		public bool StudioMode { get; set; }
 
-		public Mesh DisplayMesh => _bakedMesh;
+		public Mesh DisplayMesh => _displayMesh;
 
 		public Transform DisplayTransform => _displayGo != null ? _displayGo.transform : null;
-
-		public bool IsEditMode => _editMode;
-
-		public BoneWeight[] RemappedBoneWeights
-		{
-			get => _remappedBoneWeights;
-			set
-			{
-				_remappedBoneWeights = value;
-				InvalidateDeltaCache();
-			}
-		}
-
-		public bool HasRemappedWeights => _remappedBoneWeights != null;
-
-		public void ClearRemappedWeights()
-		{
-			_remappedBoneWeights = null;
-			InvalidateDeltaCache();
-		}
-
-		public Vector3[] BindVertices => _bindVertices;
-
-		public BoneWeight[] OriginalBoneWeights => _boneWeights;
-
-		public Transform[] SmrBones => _smrBones;
 
 		public void Init(SkinnedMeshRenderer smr)
 		{
@@ -56,7 +30,7 @@ namespace KKShapeEditor
 			bool meshNotReadable = smr.sharedMesh && !smr.sharedMesh.isReadable;
 			if (meshNotReadable)
 			{
-				ShapeEditorPlugin.Logger.LogInfo("ShapeDeformer.Init: mesh '" + smr.sharedMesh.name + "' is not readable, forcing BakeMesh path");
+				BlendShapeEditorPlugin.Logger.LogInfo("ShapeDeformer.Init: mesh '" + smr.sharedMesh.name + "' is not readable, forcing BakeMesh path");
 				StudioMode = false;
 			}
 
@@ -123,24 +97,23 @@ namespace KKShapeEditor
 				}
 			}
 
-			EnsureRunner();
 			CreateDisplayGO(smr, false);
-			if (!_bakedMesh)
-				_bakedMesh = new Mesh();
+			if (!_displayMesh)
+				_displayMesh = new Mesh();
 
 			if (meshNotReadable)
 			{
 				bool smrWasDisabled = !smr.enabled;
 				if (smrWasDisabled)
 					smr.enabled = true;
-				smr.BakeMesh(_bakedMesh);
+				smr.BakeMesh(_displayMesh);
 				if (smrWasDisabled)
 					smr.enabled = false;
-				UndoBakedScale(_bakedMesh, smr.transform.lossyScale);
-				_bakedMesh.RecalculateBounds();
-				_restColors = _bakedMesh.colors;
-				_workingVerts = new Vector3[_bakedMesh.vertexCount];
-				_workingNormals = new Vector3[_bakedMesh.vertexCount];
+				UndoBakedScale(_displayMesh, smr.transform.lossyScale);
+				_displayMesh.RecalculateBounds();
+				_restColors = _displayMesh.colors;
+				_workingVerts = new Vector3[_displayMesh.vertexCount];
+				_workingNormals = new Vector3[_displayMesh.vertexCount];
 				return;
 			}
 
@@ -158,10 +131,10 @@ namespace KKShapeEditor
 				Vector3[] normals = mesh.normals;
 				DestroyImmediate(mesh);
 				UndoBakedScale(vertices, smr.transform.lossyScale);
-				_bakedMesh.vertices = vertices;
+				_displayMesh.vertices = vertices;
 				if (normals != null && normals.Length != 0)
-					_bakedMesh.normals = normals;
-				_bakedMesh.RecalculateBounds();
+					_displayMesh.normals = normals;
+				_displayMesh.RecalculateBounds();
 			}
 		}
 
@@ -169,7 +142,7 @@ namespace KKShapeEditor
 		{
 			if (sourceMf.sharedMesh && !sourceMf.sharedMesh.isReadable)
 			{
-				ShapeEditorPlugin.Logger.LogWarning("ShapeDeformer.Init: static mesh '" + sourceMf.sharedMesh.name + "' is not readable, skipping");
+				BlendShapeEditorPlugin.Logger.LogWarning("ShapeDeformer.Init: static mesh '" + sourceMf.sharedMesh.name + "' is not readable, skipping");
 				return;
 			}
 
@@ -190,7 +163,6 @@ namespace KKShapeEditor
 			_originalStaticShadowMode = sourceMr.shadowCastingMode;
 			_smr = null;
 			ClearCPUSkinningData();
-			DestroyRunner();
 
 			_restVertices = sourceMf.sharedMesh.vertices;
 			_restNormals = sourceMf.sharedMesh.normals;
@@ -201,55 +173,55 @@ namespace KKShapeEditor
 				_workingNormals = new Vector3[_restNormals.Length];
 
 			CreateDisplayGO(sourceMr, true);
-			if (!_bakedMesh)
-				_bakedMesh = new Mesh();
+			if (!_displayMesh)
+				_displayMesh = new Mesh();
 			CopyStaticMeshAttributes(sourceMf.sharedMesh);
 		}
 
 		private void CreateDisplayGO(Renderer source, bool copyLightmap = false)
 		{
-			_displayGo = new GameObject("_kkse_deform_display");
+			_displayGo = new GameObject("_blendshapeeditor_display");
 			_displayGo.transform.SetParent(source.transform, false);
 			_displayGo.transform.localPosition = Vector3.zero;
 			_displayGo.transform.localRotation = Quaternion.identity;
 			_displayGo.transform.localScale = Vector3.one;
 			_displayGo.layer = source.gameObject.layer;
-			_meshFilter = _displayGo.AddComponent<MeshFilter>();
-			_meshRenderer = _displayGo.AddComponent<MeshRenderer>();
-			_meshRenderer.sharedMaterials = source.sharedMaterials;
-			_meshRenderer.shadowCastingMode = source.shadowCastingMode;
-			_meshRenderer.receiveShadows = source.receiveShadows;
-			_meshRenderer.lightProbeUsage = source.lightProbeUsage;
-			_meshRenderer.reflectionProbeUsage = source.reflectionProbeUsage;
-			_meshRenderer.probeAnchor = source.probeAnchor;
+			_displayMeshFilter = _displayGo.AddComponent<MeshFilter>();
+			_displayMeshRenderer = _displayGo.AddComponent<MeshRenderer>();
+			_displayMeshRenderer.sharedMaterials = source.sharedMaterials;
+			_displayMeshRenderer.shadowCastingMode = source.shadowCastingMode;
+			_displayMeshRenderer.receiveShadows = source.receiveShadows;
+			_displayMeshRenderer.lightProbeUsage = source.lightProbeUsage;
+			_displayMeshRenderer.reflectionProbeUsage = source.reflectionProbeUsage;
+			_displayMeshRenderer.probeAnchor = source.probeAnchor;
 			if (copyLightmap)
 			{
-				_meshRenderer.lightmapIndex = source.lightmapIndex;
-				_meshRenderer.lightmapScaleOffset = source.lightmapScaleOffset;
-				_meshRenderer.realtimeLightmapIndex = source.realtimeLightmapIndex;
-				_meshRenderer.realtimeLightmapScaleOffset = source.realtimeLightmapScaleOffset;
+				_displayMeshRenderer.lightmapIndex = source.lightmapIndex;
+				_displayMeshRenderer.lightmapScaleOffset = source.lightmapScaleOffset;
+				_displayMeshRenderer.realtimeLightmapIndex = source.realtimeLightmapIndex;
+				_displayMeshRenderer.realtimeLightmapScaleOffset = source.realtimeLightmapScaleOffset;
 			}
-			_meshRenderer.enabled = false;
+			_displayMeshRenderer.enabled = false;
 		}
 
 		private void CopyStaticMeshAttributes(Mesh sourceMesh)
 		{
-			if (!sourceMesh || !_bakedMesh)
+			if (!sourceMesh || !_displayMesh)
 				return;
 
-			_bakedMesh.Clear();
-			_bakedMesh.vertices = sourceMesh.vertices;
-			_bakedMesh.normals = sourceMesh.normals;
-			_bakedMesh.uv = sourceMesh.uv;
+			_displayMesh.Clear();
+			_displayMesh.vertices = sourceMesh.vertices;
+			_displayMesh.normals = sourceMesh.normals;
+			_displayMesh.uv = sourceMesh.uv;
 			if (sourceMesh.uv2 != null && sourceMesh.uv2.Length != 0)
-				_bakedMesh.uv2 = sourceMesh.uv2;
-			_bakedMesh.tangents = sourceMesh.tangents;
+				_displayMesh.uv2 = sourceMesh.uv2;
+			_displayMesh.tangents = sourceMesh.tangents;
 			if (sourceMesh.colors != null && sourceMesh.colors.Length != 0)
-				_bakedMesh.colors = sourceMesh.colors;
-			_bakedMesh.subMeshCount = sourceMesh.subMeshCount;
+				_displayMesh.colors = sourceMesh.colors;
+			_displayMesh.subMeshCount = sourceMesh.subMeshCount;
 			for (var i = 0; i < sourceMesh.subMeshCount; i++)
-				_bakedMesh.SetTriangles(sourceMesh.GetTriangles(i), i);
-			_bakedMesh.RecalculateBounds();
+				_displayMesh.SetTriangles(sourceMesh.GetTriangles(i), i);
+			_displayMesh.RecalculateBounds();
 		}
 
 		public void EnterEditMode(Material editMaterial)
@@ -263,8 +235,8 @@ namespace KKShapeEditor
 			_editMode = false;
 			_editColors = null;
 			_editMaterial = null;
-			if (_bakedMesh && _restColors != null)
-				_bakedMesh.colors = _restColors;
+			if (_displayMesh && _restColors != null)
+				_displayMesh.colors = _restColors;
 		}
 
 		public void SetEditColors(Color[] colors)
@@ -274,8 +246,6 @@ namespace KKShapeEditor
 
 		private void LateUpdate()
 		{
-			if (_runner && !_isStatic)
-				return;
 			DoDeformation();
 		}
 
@@ -289,7 +259,7 @@ namespace KKShapeEditor
 					return;
 				case true when _smr.sharedMesh && _sourceMeshId != 0 && _smr.sharedMesh.GetInstanceID() != _sourceMeshId:
 				{
-					ShapeEditorPlugin.Logger.LogInfo(
+					BlendShapeEditorPlugin.Logger.LogInfo(
 						$"DoDeformation: mesh replaced (stored={_sourceMeshId}, current={_smr.sharedMesh.GetInstanceID()}), re-initializing");
 					SkinnedMeshRenderer smr = _smr;
 					smr.enabled = true;
@@ -302,7 +272,7 @@ namespace KKShapeEditor
 				{
 					if (isStaticMesh && _sourceMeshFilter.sharedMesh && _sourceMeshId != 0 && _sourceMeshFilter.sharedMesh.GetInstanceID() != _sourceMeshId)
 					{
-						ShapeEditorPlugin.Logger.LogInfo("DoDeformation: static mesh replaced, re-initializing");
+						BlendShapeEditorPlugin.Logger.LogInfo("DoDeformation: static mesh replaced, re-initializing");
 						if (_sourceMeshRenderer)
 						{
 							_sourceMeshRenderer.enabled = true;
@@ -330,8 +300,8 @@ namespace KKShapeEditor
 					_sourceMeshRenderer.enabled = true;
 					_sourceMeshRenderer.shadowCastingMode = _originalStaticShadowMode;
 				}
-				if (_meshRenderer)
-					_meshRenderer.enabled = false;
+				if (_displayMeshRenderer)
+					_displayMeshRenderer.enabled = false;
 				return;
 			}
 
@@ -352,13 +322,13 @@ namespace KKShapeEditor
 					bool smrWasDisabled = !_smr.enabled;
 					if (smrWasDisabled)
 						_smr.enabled = true;
-					_smr.BakeMesh(_bakedMesh);
+					_smr.BakeMesh(_displayMesh);
 					if (smrWasDisabled)
 						_smr.enabled = false;
 
 					if (_bakedVertsList == null)
 						_bakedVertsList = new List<Vector3>();
-					_bakedMesh.GetVertices(_bakedVertsList);
+					_displayMesh.GetVertices(_bakedVertsList);
 					int count = _bakedVertsList.Count;
 					if (_workingVerts == null || _workingVerts.Length != count)
 						_workingVerts = new Vector3[count];
@@ -367,7 +337,7 @@ namespace KKShapeEditor
 
 					if (_bakedNormalsList == null)
 						_bakedNormalsList = new List<Vector3>();
-					_bakedMesh.GetNormals(_bakedNormalsList);
+					_displayMesh.GetNormals(_bakedNormalsList);
 					if (_bakedNormalsList.Count == count)
 					{
 						if (_workingNormals == null || _workingNormals.Length != count)
@@ -426,21 +396,21 @@ namespace KKShapeEditor
 				{
 					_loggedDeltaMismatch = true;
 					string meshName = isSkinned ? _smr ? _smr.name : "?" : _sourceMeshFilter ? _sourceMeshFilter.name : "?";
-					ShapeEditorPlugin.Logger.LogWarning(
+					BlendShapeEditorPlugin.Logger.LogWarning(
 						$"DoDeformation: delta length mismatch (deltaLen={_cachedFinalDeltas.Length}, vertsLen={workingVerts.Length}, mesh='{meshName}')");
 				}
 			}
 
 			bool hasValidNormals = workingNormals != null && workingNormals.Length == workingVerts.Length;
-			_bakedMesh.vertices = workingVerts;
+			_displayMesh.vertices = workingVerts;
 			if (hasValidNormals)
-				_bakedMesh.normals = workingNormals;
+				_displayMesh.normals = workingNormals;
 			else
-				_bakedMesh.RecalculateNormals();
-			_bakedMesh.RecalculateBounds();
+				_displayMesh.RecalculateNormals();
+			_displayMesh.RecalculateBounds();
 
 			if (_editMode && _editColors != null)
-				_bakedMesh.colors = _editColors;
+				_displayMesh.colors = _editColors;
 
 			if (_editMode && _editColors != null)
 				ApplyEditMaterial();
@@ -452,8 +422,8 @@ namespace KKShapeEditor
 			else if (_sourceMeshRenderer)
 				_sourceMeshRenderer.enabled = false;
 
-			_meshRenderer.enabled = true;
-			_meshFilter.sharedMesh = _bakedMesh;
+			_displayMeshRenderer.enabled = true;
+			_displayMeshFilter.sharedMesh = _displayMesh;
 			OnDeformationApplied?.Invoke();
 		}
 
@@ -570,7 +540,7 @@ namespace KKShapeEditor
 				if (delta.x == 0f && delta.y == 0f && delta.z == 0f)
 					continue;
 
-				BoneWeight bw = _remappedBoneWeights != null ? _remappedBoneWeights[j] : _boneWeights[j];
+				BoneWeight bw = _boneWeights[j];
 				Vector3 skinned = Vector3.zero;
 				if (bw.weight0 > 0f)
 					skinned += _boneMatrices[bw.boneIndex0].MultiplyVector(delta) * bw.weight0;
@@ -597,7 +567,7 @@ namespace KKShapeEditor
 				return false;
 			}
 
-			BoneWeight bw = _remappedBoneWeights != null ? _remappedBoneWeights[vertexIdx] : _boneWeights[vertexIdx];
+			BoneWeight bw = _boneWeights[vertexIdx];
 			Matrix4x4 M = Matrix4x4.zero;
 			AccumulateBoneMatrix(ref M, bw.boneIndex0, bw.weight0);
 			AccumulateBoneMatrix(ref M, bw.boneIndex1, bw.weight1);
@@ -612,16 +582,16 @@ namespace KKShapeEditor
 		{
 			if (_boneWeights == null || _boneMatrices == null)
 			{
-				ShapeEditorPlugin.Logger.LogInfo($"[Diag] v={vertexIdx}: no bone data (static / non-readable)");
+				BlendShapeEditorPlugin.Logger.LogInfo($"[Diag] v={vertexIdx}: no bone data (static / non-readable)");
 				return;
 			}
 			if (vertexIdx < 0 || vertexIdx >= _boneWeights.Length)
 			{
-				ShapeEditorPlugin.Logger.LogInfo($"[Diag] v={vertexIdx}: out of range ({_boneWeights.Length})");
+				BlendShapeEditorPlugin.Logger.LogInfo($"[Diag] v={vertexIdx}: out of range ({_boneWeights.Length})");
 				return;
 			}
 
-			BoneWeight bw = _remappedBoneWeights != null ? _remappedBoneWeights[vertexIdx] : _boneWeights[vertexIdx];
+			BoneWeight bw = _boneWeights[vertexIdx];
 			Matrix4x4 M = Matrix4x4.zero;
 			AccumulateBoneMatrix(ref M, bw.boneIndex0, bw.weight0);
 			AccumulateBoneMatrix(ref M, bw.boneIndex1, bw.weight1);
@@ -637,7 +607,7 @@ namespace KKShapeEditor
 			float scaleRatio = dispLen > 1E-06f ? appliedDisp.magnitude / dispLen : 0f;
 			float angleDeg = Vector3.Angle(appliedDisp, localDisp);
 
-			ShapeEditorPlugin.Logger.LogInfo(string.Concat(new[]
+			BlendShapeEditorPlugin.Logger.LogInfo(string.Concat(new[]
 			{
 				$"[Diag] v={vertexIdx} renderer={(_smr != null ? _smr.name : "?")} studio={StudioMode}\n",
 				$"  bones: {BoneName(bw.boneIndex0)}({bw.weight0:F2}) {BoneName(bw.boneIndex1)}({bw.weight1:F2}) {BoneName(bw.boneIndex2)}({bw.weight2:F2}) {BoneName(bw.boneIndex3)}({bw.weight3:F2})\n",
@@ -684,7 +654,7 @@ namespace KKShapeEditor
 
 		private void ApplyEditMaterial()
 		{
-			if (!_editMaterial || !_meshRenderer)
+			if (!_editMaterial || !_displayMeshRenderer)
 				return;
 
 			Renderer source = SourceRenderer;
@@ -692,7 +662,7 @@ namespace KKShapeEditor
 				return;
 
 			Material[] sourceMats = source.sharedMaterials;
-			Material[] displayMats = _meshRenderer.sharedMaterials;
+			Material[] displayMats = _displayMeshRenderer.sharedMaterials;
 			bool materialsChanged = sourceMats.Length != displayMats.Length;
 			if (!materialsChanged)
 			{
@@ -706,12 +676,12 @@ namespace KKShapeEditor
 			var newMats = new Material[sourceMats.Length];
 			for (var j = 0; j < newMats.Length; j++)
 				newMats[j] = _editMaterial;
-			_meshRenderer.sharedMaterials = newMats;
+			_displayMeshRenderer.sharedMaterials = newMats;
 		}
 
 		private void SyncMaterials()
 		{
-			if (!_meshRenderer)
+			if (!_displayMeshRenderer)
 				return;
 
 			Renderer source = SourceRenderer;
@@ -719,7 +689,7 @@ namespace KKShapeEditor
 				return;
 
 			Material[] sourceMats = source.sharedMaterials;
-			Material[] displayMats = _meshRenderer.sharedMaterials;
+			Material[] displayMats = _displayMeshRenderer.sharedMaterials;
 			bool materialsChanged = sourceMats.Length != displayMats.Length;
 			if (!materialsChanged)
 			{
@@ -729,28 +699,10 @@ namespace KKShapeEditor
 				}
 			}
 			if (materialsChanged)
-				_meshRenderer.sharedMaterials = sourceMats;
+				_displayMeshRenderer.sharedMaterials = sourceMats;
 		}
 
 		private Renderer SourceRenderer => _smr ? (Renderer)_smr : _sourceMeshRenderer;
-
-		private void EnsureRunner()
-		{
-			if (_runner)
-				return;
-
-			GameObject runnerGo = new GameObject("_kkse_deformer_runner");
-			DontDestroyOnLoad(runnerGo);
-			_runner = runnerGo.AddComponent<ShapeDeformerRunner>();
-			_runner.Deformer = this;
-		}
-
-		private void DestroyRunner()
-		{
-			if (!_runner) return;
-			DestroyImmediate(_runner.gameObject);
-			_runner = null;
-		}
 
 		private void ClearCPUSkinningData()
 		{
@@ -795,7 +747,6 @@ namespace KKShapeEditor
 
 		private void OnDestroy()
 		{
-			DestroyRunner();
 			if (_smr)
 			{
 				_smr.enabled = true;
@@ -811,47 +762,110 @@ namespace KKShapeEditor
 			_editColors = null;
 			if (_displayGo)
 				DestroyImmediate(_displayGo);
-			if (_bakedMesh)
-				DestroyImmediate(_bakedMesh);
+			if (_displayMesh)
+				DestroyImmediate(_displayMesh);
 		}
 
-		private SkinnedMeshRenderer _smr;
-		private GameObject _displayGo;
-		private MeshFilter _meshFilter;
-		private MeshRenderer _meshRenderer;
-		private Mesh _bakedMesh;
-		private MeshFilter _sourceMeshFilter;
-		private MeshRenderer _sourceMeshRenderer;
-		private Vector3[] _restVertices;
-		private Vector3[] _restNormals;
-		private Color[] _restColors;
-		private bool _isStatic;
-		private Vector3[] _workingVerts;
-		private Vector3[] _workingNormals;
+		// --- Target renderer (one of _smr or _sourceMeshFilter/_sourceMeshRenderer is set, not both) ---
+		private SkinnedMeshRenderer _smr;              // target SMR; null when targeting a static mesh
+		private MeshFilter _sourceMeshFilter;          // static mesh source; null when targeting an SMR
+		private MeshRenderer _sourceMeshRenderer;      // renderer paired with _sourceMeshFilter
+
+		// --- Display GO: child GameObject with a plain MeshRenderer that shows the deformed result ---
+		private GameObject _displayGo;                 // parent of the display MeshFilter/MeshRenderer
+		private MeshFilter _displayMeshFilter;         // MeshFilter on _displayGo; receives _bakedMesh each frame
+		private MeshRenderer _displayMeshRenderer;     // MeshRenderer on _displayGo; shown while original is hidden
+		private Mesh _displayMesh;                     // reused mesh object written to every frame
+
+		// --- Static-mesh rest state (only valid when _isStatic == true) ---
+		private bool _isStatic;                        // true when the target is a MeshFilter/MeshRenderer pair
+		private Vector3[] _restVertices;               // original vertex positions from sourceMeshFilter.sharedMesh
+		private Vector3[] _restNormals;                // original normals from sourceMeshFilter.sharedMesh
+		private Color[] _restColors;                   // original vertex colors; restored when exiting edit mode
+
+		// --- Per-frame working buffers (reused to avoid GC each LateUpdate) ---
+		private Vector3[] _workingVerts;               // scratch buffer for this frame's final vertex positions
+		private Vector3[] _workingNormals;             // scratch buffer for this frame's final normals
+
+		// --- Shadow mode saved at Init time so OnDestroy can restore it ---
 		private ShadowCastingMode _originalSMRShadowMode;
 		private ShadowCastingMode _originalStaticShadowMode;
-		private Vector3[] _bindVertices;
-		private Vector3[] _bindNormals;
-		private BoneWeight[] _boneWeights;
-		private BoneWeight[] _remappedBoneWeights;
-		private Matrix4x4[] _bindPoses;
-		private Transform[] _smrBones;
-		private Matrix4x4[] _boneMatrices;
-		private int _blendShapeCount;
-		private Vector3[][] _bsDeltaVertices;
-		private Vector3[][] _bsDeltaNormals;
-		private Vector3[] _blendedVertices;
-		private Vector3[] _blendedNormals;
-		private float[] _bsWeightsCache;
-		private int _sourceMeshId;
-		private ShapeDeformerRunner _runner;
-		private List<Vector3> _bakedVertsList;
-		private List<Vector3> _bakedNormalsList;
-		private Vector3[] _cachedFinalDeltas;
-		private bool _loggedDeltaMismatch;
-		private bool _editMode;
-		private Material _editMaterial;
-		private Color[] _editColors;
+
+		// --- CPU skinning data (Studio mode only; pre-sampled from sharedMesh at Init time) ---
+		private Vector3[] _bindVertices;               // bind-pose vertex positions from sharedMesh.vertices
+		private Vector3[] _bindNormals;                // bind-pose normals from sharedMesh.normals
+		private BoneWeight[] _boneWeights;             // per-vertex bone weights; also used for delta conversion in Maker
+		private Matrix4x4[] _bindPoses;                // inverse bind-pose matrices from sharedMesh.bindposes
+		private Transform[] _smrBones;                 // bone transforms sampled from smr.bones at Init time
+		private Matrix4x4[] _boneMatrices;             // composed bone matrices (world-to-local * boneL2W * bindPose) per frame
+
+		// --- BlendShape baking during CPU skinning (Studio mode) ---
+		private int _blendShapeCount;                  // number of blendshapes on sharedMesh at Init time
+		private Vector3[][] _bsDeltaVertices;          // [blendshapeIndex][vertexIndex] delta verts at 100% weight
+		private Vector3[][] _bsDeltaNormals;           // [blendshapeIndex][vertexIndex] delta normals at 100% weight
+		private Vector3[] _blendedVertices;            // bind verts + active blendshape contributions (scratch)
+		private Vector3[] _blendedNormals;             // bind normals + active blendshape contributions (scratch)
+		private float[] _bsWeightsCache;               // per-frame snapshot of smr.GetBlendShapeWeight() / 100f
+
+		// --- Misc ---
+		private int _sourceMeshId;                     // GetInstanceID() of the mesh at Init time; detects hot-swap
+		private List<Vector3> _bakedVertsList;         // reused list for BakeMesh vertex readback (avoids array alloc)
+		private List<Vector3> _bakedNormalsList;       // reused list for BakeMesh normal readback
+		private Vector3[] _cachedFinalDeltas;          // result of DeformData.ComputeFinalDelta(), invalidated on dirty
+		private bool _loggedDeltaMismatch;             // rate-limit for the delta-length mismatch warning
+
+		// --- Edit-mode overlay ---
+		private bool _editMode;                        // true while the editor has called EnterEditMode
+		private Material _editMaterial;                // solid-color material used to tint the display mesh in edit mode
+		private Color[] _editColors;                   // per-vertex colors written to _bakedMesh to show brush influence
+
+		/// <summary>
+		/// Bakes the current combined deformation into a new blendshape on the SMR's mesh.
+		/// Returns the blendshape index, or -1 on failure.
+		/// Also returns the delta arrays used for BSC registration.
+		/// </summary>
+		public int BakeToBlendShape(string shapeName, out Vector3[] outDeltaVerts, out Vector3[] outDeltaNormals,
+			bool computeDeltaNormals = true)
+		{
+			outDeltaVerts = null;
+			outDeltaNormals = null;
+
+			if (!_smr || !_smr.sharedMesh)
+			{
+				BlendShapeEditorPlugin.Logger.LogWarning("BakeToBlendShape: no SMR or mesh");
+				return -1;
+			}
+			if (DeformData == null || !DeformData.HasLayers)
+			{
+				BlendShapeEditorPlugin.Logger.LogWarning("BakeToBlendShape: no layers to bake");
+				return -1;
+			}
+
+			Mesh mesh = _smr.sharedMesh;
+			Vector3[] bindVerts = mesh.vertices;
+			int vertCount = bindVerts.Length;
+
+			Vector3[] combinedDelta = DeformData.ComputeFinalDelta();
+			if (combinedDelta == null || combinedDelta.Length != vertCount)
+			{
+				BlendShapeEditorPlugin.Logger.LogWarning("BakeToBlendShape: delta length mismatch");
+				return -1;
+			}
+
+			outDeltaVerts = combinedDelta;
+
+			if (computeDeltaNormals)
+			{
+				Vector3[] bindNormals = mesh.normals;
+				int[] triangles = mesh.triangles;
+				outDeltaNormals = MeshHelper.ComputePartialDeltaNormals(bindVerts, bindNormals, combinedDelta, triangles);
+			}
+
+			mesh.AddBlendShapeFrame(shapeName, 100f, combinedDelta, outDeltaNormals, null);
+			int idx = mesh.GetBlendShapeIndex(shapeName);
+			BlendShapeEditorPlugin.Logger.LogInfo($"BakeToBlendShape: baked '{shapeName}' as blendshape index {idx}");
+			return idx;
+		}
 
 		public Action OnDeformationApplied;
 		public Action OnMeshReplaced;

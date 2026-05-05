@@ -22,6 +22,7 @@
         <DefineConstants>DEBUG;TRACE;KKS</DefineConstants>
         <ErrorReport>prompt</ErrorReport>
         <WarningLevel>4</WarningLevel>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
     <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
         <PlatformTarget>AnyCPU</PlatformTarget>
@@ -31,6 +32,7 @@
         <DefineConstants>TRACE;KKS</DefineConstants>
         <ErrorReport>prompt</ErrorReport>
         <WarningLevel>4</WarningLevel>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
     <ItemGroup>
       <None Include="App.config" />
@@ -57,8 +59,17 @@
       <Reference Include="KKSAPI, Version=1.46.1.0, Culture=neutral, processorArchitecture=MSIL">
         <HintPath>..\packages\IllusionModdingAPI.KKSAPI.1.46.1\lib\net46\KKSAPI.dll</HintPath>
       </Reference>
+      <Reference Include="KKSPE">
+        <HintPath>..\..\AdditionalDependencies\KKSPE-publicized.dll</HintPath>
+      </Reference>
+      <Reference Include="KKS_BlendshapeCreator">
+        <HintPath>..\..\AdditionalDependencies\KKS_BlendshapeCreator-publicized.dll</HintPath>
+      </Reference>
       <Reference Include="KKS_ExtensibleSaveFormat, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
         <HintPath>..\packages\ExtensibleSaveFormat.KoikatsuSunshine.19.4.0\lib\net46\KKS_ExtensibleSaveFormat.dll</HintPath>
+      </Reference>
+      <Reference Include="KKS_Fix_MakerOptimizations">
+        <HintPath>..\..\AdditionalDependencies\KKS_Fix_MakerOptimizations-publicized.dll</HintPath>
       </Reference>
       <Reference Include="Sirenix.Serialization, Version=2.1.13.0, Culture=neutral, processorArchitecture=MSIL">
         <HintPath>..\packages\IllusionLibs.KoikatsuSunshine.UnityEngine.CoreModule.2019.4.9\lib\net46\Sirenix.Serialization.dll</HintPath>
