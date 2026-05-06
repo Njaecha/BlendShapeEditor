@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Runtime.InteropServices;
 using IllusionFixes;
 using KKAPI.Maker;
@@ -18,19 +17,7 @@ namespace BlendShapeEditor
 		[DllImport("user32.dll")]
 		private static extern bool ScreenToClient(IntPtr hWnd, ref POINT lpPoint);
 
-		[DllImport("user32.dll")]
-		private static extern short GetAsyncKeyState(int vKey);
-
-		public bool MouseButton { get; private set; }
-		public bool MouseButtonR { get; private set; }
-		public bool CtrlHeld { get; private set; }
-		public bool ShiftHeld { get; private set; }
-		public bool AltHeld { get; private set; }
-		public bool MouseButtonDown { get; private set; }
-		public bool MouseButtonUp { get; private set; }
 		public Vector3 MousePosition { get; private set; }
-		public bool UndoPressed { get; private set; }
-		public bool RedoPressed { get; private set; }
 
 		public void Init()
 		{
@@ -48,52 +35,20 @@ namespace BlendShapeEditor
 			FindCameraControls();
 		}
 
-		public void PollInput()
+		public void PollMousePosition()
 		{
-			
-			_prevMouseButton = MouseButton;
-			MouseButton = ((GetAsyncKeyState(VK_LBUTTON) & 32768) != 0);
-			MouseButtonR = ((GetAsyncKeyState(VK_RBUTTON) & 32768) != 0);
-			CtrlHeld = ((GetAsyncKeyState(VK_LCONTROL) & 32768) != 0 || (GetAsyncKeyState(VK_RCONTROL) & 32768) != 0);
-			ShiftHeld = ((GetAsyncKeyState(VK_LSHIFT) & 32768) != 0 || (GetAsyncKeyState(VK_RSHIFT) & 32768) != 0);
-			AltHeld = ((GetAsyncKeyState(VK_LMENU) & 32768) != 0 || (GetAsyncKeyState(VK_RMENU) & 32768) != 0);
-			MouseButtonDown = MouseButton && !_prevMouseButton;
-			MouseButtonUp = !MouseButton && _prevMouseButton;
-
-			bool zKey = (GetAsyncKeyState(VK_Z) & 32768) != 0;
-			bool yKey = (GetAsyncKeyState(VK_Y) & 32768) != 0;
-			float now = Time.unscaledTime;
-
-			UndoPressed = CtrlHeld && zKey && !_prevZKey && now - _undoDebounceTime > DebounceInterval;
-			RedoPressed = CtrlHeld && yKey && !_prevYKey && now - _redoDebounceTime > DebounceInterval;
-
-			if (UndoPressed)
-				_undoDebounceTime = now;
-			if (RedoPressed)
-				_redoDebounceTime = now;
-
-			_prevZKey = zKey;
-			_prevYKey = yKey;
 			MousePosition = GetRealMousePosition();
 		}
 
-		public void UpdateCameraIsolation(bool editorActive)
+		public void SetCameraEnabled(bool enabled)
 		{
-			if (!editorActive)
-			{
-				if (_cameraEnabled) return;
-				SetCameraEnabled(true);
-				return;
-			}
-
-			if (CtrlHeld != _cameraEnabled)
-				SetCameraEnabled(CtrlHeld);
+			_cameraEnabled = enabled;
+			_cameraScripts.ForEach(mb => mb.enabled = enabled);
 		}
 
-		public void ResetGameInput()
+		public void Cleanup()
 		{
-			if (!CtrlHeld)
-				Input.ResetInputAxes();
+			SetCameraEnabled(true);
 		}
 
 		private Vector3 GetRealMousePosition()
@@ -102,6 +57,24 @@ namespace BlendShapeEditor
 			if (_gameWindowHandle == IntPtr.Zero || !GetCursorPos(out point)) return Input.mousePosition;
 			ScreenToClient(_gameWindowHandle, ref point);
 			return new Vector3((float)point.X, (float)(Screen.height - point.Y), 0f);
+		}
+
+		public bool IsCamControlNow => _isCamControlNow();
+
+		private bool _isCamControlNow()
+		{
+			if (!_cameraEnabled) return false;
+			if (StudioAPI.InsideStudio)
+			{
+				Studio.CameraControl camCtrl = Studio.Studio.Instance?.cameraCtrl;
+				return camCtrl && camCtrl.isControlNow;
+			}
+			if (MakerAPI.InsideMaker)
+			{
+				CameraControl_Ver2 camCtrl = ChaCustom.CustomBase.Instance?.customCtrl?.camCtrl;
+				return camCtrl && camCtrl.isControlNow;
+			}
+			return false;
 		}
 
 		private void FindCameraControls()
@@ -123,34 +96,6 @@ namespace BlendShapeEditor
 			}
 		}
 
-		private void SetCameraEnabled(bool enabled)
-		{
-			_cameraEnabled = enabled;
-			_cameraScripts.ForEach(md => md.enabled = enabled);
-		}
-		
-		public void Cleanup()
-		{
-			SetCameraEnabled(true);
-		}
-
-		private const int VK_LBUTTON = 1;
-		private const int VK_RBUTTON = 2;
-		private const int VK_LCONTROL = 162;
-		private const int VK_RCONTROL = 163;
-		private const int VK_LSHIFT = 160;
-		private const int VK_RSHIFT = 161;
-		private const int VK_LMENU = 164;
-		private const int VK_RMENU = 165;
-		private const int VK_Z = 90;
-		private const int VK_Y = 89;
-		private const float DebounceInterval = 0.15f;
-
-		private bool _prevMouseButton;
-		private bool _prevZKey;
-		private bool _prevYKey;
-		private float _undoDebounceTime;
-		private float _redoDebounceTime;
 		// maker and studio use different camera control scripts
 		private readonly List<MonoBehaviour> _cameraScripts = new List<MonoBehaviour>();
 		private bool _cameraEnabled = true;

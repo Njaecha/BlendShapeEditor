@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using KKAPI.Utilities;
 using UnityEngine;
 
 namespace BlendShapeEditor
@@ -64,8 +65,9 @@ namespace BlendShapeEditor
 
 			Vector2 screenMouse = new Vector2(Input.mousePosition.x, (float)Screen.height - Input.mousePosition.y);
 			IsMouseOverUI = _windowRect.Contains(screenMouse) || (_showHelp && _helpWindowRect.Contains(screenMouse)) || GUIUtility.hotControl != 0;
-			if (IsMouseOverUI)
-				Input.ResetInputAxes();
+			IMGUIUtils.EatInputInRect(_windowRect);
+			if (_showHelp)
+				IMGUIUtils.EatInputInRect(_helpWindowRect);
 		}
 
 		private void DrawWindow(int id)

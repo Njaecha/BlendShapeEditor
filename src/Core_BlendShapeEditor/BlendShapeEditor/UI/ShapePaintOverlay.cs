@@ -40,6 +40,7 @@ namespace BlendShapeEditor
 
 		private void Awake()
 		{
+			_camera = Camera.main;
 			Shader shader = Shader.Find("Hidden/Internal-Colored");
 			if (!shader) return;
 			_cursorMaterial = new Material(shader);
@@ -74,8 +75,7 @@ namespace BlendShapeEditor
 				}
 			}
 			ProcessDeferredActions();
-			Input?.PollInput();
-			Input?.UpdateCameraIsolation(Window != null && Window.IsEditMode);
+			Input?.PollMousePosition();
 		}
 
 		private void ProcessDeferredActions()
@@ -112,6 +112,7 @@ namespace BlendShapeEditor
 				{
 					Window.ActiveDeformData.MoveLayerUp(layerMoveUpIdx);
 					_undoStack?.Push(new LayerReorderUndoEntry(Window.ActiveDeformData, true));
+					StudioUndoBridge.PushDummy(this);
 					_deformer?.InvalidateDeltaCache();
 				}
 			}
@@ -123,6 +124,7 @@ namespace BlendShapeEditor
 				{
 					Window.ActiveDeformData.MoveLayerDown(layerMoveDownIdx);
 					_undoStack?.Push(new LayerReorderUndoEntry(Window.ActiveDeformData, false));
+					StudioUndoBridge.PushDummy(this);
 					_deformer?.InvalidateDeltaCache();
 				}
 			}
@@ -131,7 +133,10 @@ namespace BlendShapeEditor
 				int weightUndoLayer = Window.WeightUndoLayer;
 				Window.WeightUndoLayer = -1;
 				if (_undoStack != null && Window.ActiveDeformData != null && weightUndoLayer < Window.ActiveDeformData.Layers.Count)
+				{
 					_undoStack.Push(new LayerWeightUndoEntry(Window.ActiveDeformData.Layers[weightUndoLayer], Window.WeightUndoBefore, Window.WeightUndoAfter));
+					StudioUndoBridge.PushDummy(this);
+				}
 			}
 			if (Window.DeferSetSymmetryCenter)
 			{
@@ -270,6 +275,7 @@ namespace BlendShapeEditor
 				Destroy(_wireLineMesh);
 				_wireLineMesh = null;
 			}
+			StudioUndoBridge.ClearBSECommands();
 			_undoStack = null;
 			_isBrushing = false;
 		}
@@ -346,6 +352,7 @@ namespace BlendShapeEditor
 				return;
 			DeformLayer layer = Window.ActiveDeformData.AddLayer(mesh.vertexCount);
 			_undoStack?.Push(new LayerAddUndoEntry(Window.ActiveDeformData, layer, Window.ActiveDeformData.Layers.Count - 1));
+			StudioUndoBridge.PushDummy(this);
 		}
 
 		private void DoLayerRemove(int layerIndex)
@@ -359,7 +366,10 @@ namespace BlendShapeEditor
 				removedLayer = data.Layers[layerIndex];
 			data.RemoveLayer(layerIndex);
 			if (_undoStack != null && removedLayer != null)
+			{
 				_undoStack.Push(new LayerRemoveUndoEntry(data, removedLayer, layerIndex, prevActiveIdx));
+				StudioUndoBridge.PushDummy(this);
+			}
 			_deformer?.InvalidateDeltaCache();
 			if (Window.ActiveDeformData.ActiveLayer == null)
 			{
@@ -425,7 +435,7 @@ namespace BlendShapeEditor
 				if (_gizmo != null && cachedVertices != null)
 					_gizmo.UpdateCentroid(cachedVertices);
 			}
-			Camera main = Camera.main;
+			Camera main = _camera;
 			if (!main || Input == null)
 				return;
 			SelectionTool.Radius = Window.BrushRadius;
@@ -460,6 +470,9 @@ namespace BlendShapeEditor
 						_wireColorsDirty = true;
 					}
 				}
+				// UpdateHover runs every frame for handle highlight rendering
+				Transform targetTransform = SelectionTool.TargetTransform;
+				_gizmo.UpdateHover(Input.MousePosition, main, targetTransform);
 			}
 			bool prevSymEnabled = _symmetryEnabled;
 			int prevSymAxis = _symmetryAxis;
@@ -483,120 +496,106 @@ namespace BlendShapeEditor
 						UpdateGizmoTarget(cachedVertices3);
 				}
 			}
-			if (_undoStack != null && Window.IsEditMode)
-			{
-				if (Input.UndoPressed && _undoStack.CanUndo)
-				{
-					UndoContext ctx = new UndoContext
-					{
-						Deformer = _deformer,
-						Data = Window.ActiveDeformData,
-						Window = Window
-					};
-					_undoStack.Undo(ctx);
-					PostUndoRedoCleanup();
-				}
-				else if (Input.RedoPressed && _undoStack.CanRedo)
-				{
-					UndoContext ctx = new UndoContext
-					{
-						Deformer = _deformer,
-						Data = Window.ActiveDeformData,
-						Window = Window
-					};
-					_undoStack.Redo(ctx);
-					PostUndoRedoCleanup();
-				}
-			}
+			// Update raycast hit for cursor rendering and brush entry condition
 			if (ShapeEditorWindow.IsMouseOverUI)
 			{
 				_hasHit = false;
 				return;
 			}
-			Vector3 mousePosition = Input.MousePosition;
-			Ray ray = main.ScreenPointToRay(mousePosition);
+			Ray ray = main.ScreenPointToRay(Input.MousePosition);
 			_hasHit = SelectionTool.Raycast(ray, out _lastHitPoint, out _lastHitNormal);
-			DeformData activeDeformData = Window.ActiveDeformData;
-			if (activeDeformData == null)
-				return;
-			DeformLayer activeLayer = activeDeformData.ActiveLayer;
-			if (Window.OperationMode == ShapeEditorWindow.OpMode.Brush)
-			{
-				ProcessBrushInteraction(main, ray, mousePosition, activeLayer);
-				if (_isBrushing && !Input.MouseButton)
-				{
-					_isBrushing = false;
-					_moveGrabVertices = null;
-					_moveGrabResult = null;
-					_moveGrabMirrorResult = null;
-					CommitBrushUndoEntry(activeLayer);
-				}
-			}
-			else
-			{
-				if (_isBrushing)
-				{
-					_isBrushing = false;
-					_moveGrabVertices = null;
-					_moveGrabResult = null;
-					_moveGrabMirrorResult = null;
-					CommitBrushUndoEntry(activeLayer);
-				}
-				ProcessGizmoInteraction(main, mousePosition, activeLayer);
-			}
-			_prevMousePos = mousePosition;
 		}
 
-		private void ProcessBrushInteraction(Camera cam, Ray ray, Vector3 mousePos, DeformLayer activeLayer)
+		private void ProcessBrushEvent(Event e, Camera cam, DeformLayer activeLayer)
 		{
-			if (activeLayer == null || !Input.MouseButton || !_hasHit || Input.CtrlHeld)
+			if (activeLayer == null || Input.IsCamControlNow)
 				return;
-			if (!_isBrushing)
+
+			// user left-clicked on model
+			if (e.type == EventType.MouseDown && e.button == 0 && _hasHit)
 			{
 				_isBrushing = true;
 				_brushBeforeSnapshot = new Dictionary<int, Vector3>();
-			}
-			BrushResult brushResult = SelectionTool.BrushSelect(ray);
-			if (brushResult == null || brushResult.AffectedVertices.Count == 0)
+				Input?.SetCameraEnabled(false);
+				ApplyBrush(e, cam, activeLayer);
+				e.Use();
 				return;
+			}
+			// user is brushing
+			if (_isBrushing)
+			{
+				// move brush while dragging brush
+				if (e.type == EventType.MouseDrag && e.button == 0)
+				{
+					ApplyBrush(e, cam, activeLayer);
+					e.Use();
+					return;
+				}
+
+				// end brush when left-click-up
+				if (e.type == EventType.MouseUp && e.button == 0)
+				{
+					_isBrushing = false;
+					_moveGrabVertices = null;
+					_moveGrabResult = null;
+					_moveGrabMirrorResult = null;
+					CommitBrushUndoEntry(activeLayer);
+					Input?.SetCameraEnabled(true);
+					e.Use();
+				}
+			}
+		}
+
+		private void ApplyBrush(Event e, Camera cam, DeformLayer activeLayer)
+		{
 			Vector3[] deltas = activeLayer.Deltas;
 			Vector3[] cachedVertices = SelectionTool.CachedVertices;
 			Vector3[] cachedNormals = SelectionTool.CachedNormals;
 			IDeformTool activeTool = GetActiveBrushTool();
-			switch (activeTool)
+			if (activeTool == null) return;
+
+			BrushResult brushResult;
+
+			if (activeTool is MoveTool moveTool)
 			{
-				case null:
-					return;
-				case MoveTool moveTool:
+				// Move tool grabs vertices once on the first frame, then keeps moving them even when off-mesh
+				if (_moveGrabVertices == null)
 				{
-					if (_moveGrabVertices == null)
+					Ray ray = cam.ScreenPointToRay(Input.MousePosition);
+					BrushResult initialResult = SelectionTool.BrushSelect(ray);
+					if (initialResult == null || initialResult.AffectedVertices.Count == 0)
+						return;
+					_moveGrabVertices = new Dictionary<int, float>(initialResult.AffectedVertices);
+					_moveGrabResult = new BrushResult
 					{
-						_moveGrabVertices = new Dictionary<int, float>(brushResult.AffectedVertices);
-						_moveGrabResult = new BrushResult
-						{
-							HitPoint = brushResult.HitPoint,
-							HitNormal = brushResult.HitNormal,
-							AffectedVertices = _moveGrabVertices
-						};
-					}
-					brushResult = _moveGrabResult;
-					moveTool.RendererTransform = _targetRenderer ? _targetRenderer.transform : null;
-					moveTool.UseViewPlane = !Input.ShiftHeld;
-					Vector3 hitScreen = cam.WorldToScreenPoint(brushResult.HitPoint);
-					Vector3 hitWorld = cam.ScreenToWorldPoint(hitScreen);
-					Vector3 hitWorldOffset = cam.ScreenToWorldPoint(new Vector3(hitScreen.x + 1f, hitScreen.y, hitScreen.z));
-					float pixelSize = Vector3.Distance(hitWorld, hitWorldOffset);
-					float dx = mousePos.x - _prevMousePos.x;
-					float dy = mousePos.y - _prevMousePos.y;
-					if (moveTool.UseViewPlane)
-						moveTool.MouseDelta = new Vector2(dx * pixelSize, dy * pixelSize);
-					else
-						moveTool.DragDelta = dy * pixelSize;
-					break;
+						HitPoint = initialResult.HitPoint,
+						HitNormal = initialResult.HitNormal,
+						AffectedVertices = _moveGrabVertices
+					};
 				}
-				case InflateTool inflateTool:
-					inflateTool.Amount = Input.AltHeld ? -0.005f : 0.005f;
-					break;
+				brushResult = _moveGrabResult;
+				moveTool.RendererTransform = _targetRenderer ? _targetRenderer.transform : null;
+				moveTool.UseViewPlane = !e.shift;
+				Vector3 hitScreen = cam.WorldToScreenPoint(brushResult.HitPoint);
+				Vector3 hitWorld = cam.ScreenToWorldPoint(hitScreen);
+				Vector3 hitWorldOffset = cam.ScreenToWorldPoint(new Vector3(hitScreen.x + 1f, hitScreen.y, hitScreen.z));
+				float pixelSize = Vector3.Distance(hitWorld, hitWorldOffset);
+				float dx = e.delta.x;
+				float dy = -e.delta.y; // e.delta is GUI space (Y+ = down); negate to get screen space (Y+ = up)
+				if (moveTool.UseViewPlane)
+					moveTool.MouseDelta = new Vector2(dx * pixelSize, dy * pixelSize);
+				else
+					moveTool.DragDelta = dy * pixelSize;
+			}
+			else
+			{
+				// Inflate/Smooth: need a live raycast hit each frame
+				Ray ray = cam.ScreenPointToRay(Input.MousePosition);
+				brushResult = SelectionTool.BrushSelect(ray);
+				if (brushResult == null || brushResult.AffectedVertices.Count == 0)
+					return;
+				if (activeTool is InflateTool inflateTool)
+					inflateTool.Amount = e.alt ? -0.005f : 0.005f;
 			}
 
 			foreach (KeyValuePair<int, float> pair in brushResult.AffectedVertices.Where(pair => !_brushBeforeSnapshot.ContainsKey(pair.Key)))
@@ -632,7 +631,7 @@ namespace BlendShapeEditor
 					else
 						localNormal.z = -localNormal.z;
 					Vector3 mirrorWorldNormal = xform.TransformDirection(localNormal);
-					Vector3 colliderLocalPoint = SelectionTool.ColliderTransform != null ? SelectionTool.ColliderTransform.InverseTransformPoint(mirrorWorld) : localHit;
+					Vector3 colliderLocalPoint = SelectionTool.ColliderTransform ? SelectionTool.ColliderTransform.InverseTransformPoint(mirrorWorld) : localHit;
 					mirrorResult = SelectionTool.BrushSelectAtPoint(colliderLocalPoint, mirrorWorld, mirrorWorldNormal);
 					if (activeTool is MoveTool && mirrorResult != null && _moveGrabMirrorResult == null)
 						_moveGrabMirrorResult = mirrorResult;
@@ -674,6 +673,7 @@ namespace BlendShapeEditor
 				i++;
 			}
 			_undoStack.Push(new DeltaUndoEntry(layer, indices, before, after));
+			StudioUndoBridge.PushDummy(this);
 			_brushBeforeSnapshot = null;
 		}
 
@@ -689,6 +689,22 @@ namespace BlendShapeEditor
 			{
 				_deferGizmoCentroidRefresh = true;
 			}
+		}
+
+		public void UndoOneStep()
+		{
+			if (_undoStack == null || !_undoStack.CanUndo) return;
+			UndoContext ctx = new UndoContext { Deformer = _deformer, Data = Window?.ActiveDeformData, Window = Window };
+			_undoStack.Undo(ctx);
+			PostUndoRedoCleanup();
+		}
+
+		public void RedoOneStep()
+		{
+			if (_undoStack == null || !_undoStack.CanRedo) return;
+			UndoContext ctx = new UndoContext { Deformer = _deformer, Data = Window?.ActiveDeformData, Window = Window };
+			_undoStack.Redo(ctx);
+			PostUndoRedoCleanup();
 		}
 
 		private void CommitGizmoUndoEntry(DeformLayer layer)
@@ -714,60 +730,149 @@ namespace BlendShapeEditor
 				i++;
 			}
 			if (hasChanges)
+			{
 				_undoStack.Push(new DeltaUndoEntry(layer, indices, before, after));
+				StudioUndoBridge.PushDummy(this);
+			}
 			_gizmoBeforeSnapshot = null;
 		}
 
-		private void ProcessGizmoInteraction(Camera cam, Vector2 mousePos, DeformLayer activeLayer)
+		private void ProcessGizmoEvent(Event e, Camera cam, DeformLayer activeLayer)
 		{
-			if (_gizmo == null || activeLayer == null)
+			if (_gizmo == null || activeLayer == null || Input.IsCamControlNow)
 				return;
 			Transform targetTransform = SelectionTool.TargetTransform;
 			Vector3[] cachedVertices = SelectionTool.CachedVertices;
-			if (Input.MouseButtonR && !Input.CtrlHeld && !_gizmo.IsDragging)
+
+			// Gizmo drag (LMB on handle) — skipped when Alt is held (Alt+LMB = box selection)
+			if (e.type == EventType.MouseDown && e.button == 0 && !e.alt && _gizmo.HoveredAxis != GizmoEnums.None)
 			{
-				if (!_isBoxSelecting)
-				{
-					_isBoxSelecting = true;
-					_boxStart = mousePos;
-				}
-				_boxEnd = mousePos;
+				Vector2 screenPos = GUIToScreenPos(e.mousePosition);
+				if (!_gizmo.BeginDrag(screenPos, cam, targetTransform, activeLayer, cachedVertices)) return;
+				_gizmoBeforeSnapshot = new Dictionary<int, Vector3>(_gizmo.DragStartDeltas);
+				Input?.SetCameraEnabled(false);
+				e.Use();
+				return;
 			}
-			else if (_isBoxSelecting)
+			if (e.type == EventType.MouseDrag && e.button == 0 && _gizmo.IsDragging)
+			{
+				_gizmo.UpdateDrag(GUIToScreenPos(e.mousePosition), cam, targetTransform, activeLayer, cachedVertices);
+				e.Use();
+				return;
+			}
+			if (e.type == EventType.MouseUp && e.button == 0 && _gizmo.IsDragging)
+			{
+				_gizmo.EndDrag();
+				CommitGizmoUndoEntry(activeLayer);
+				Input?.SetCameraEnabled(true);
+				e.Use();
+				return;
+			}
+
+			// Alt+LMB: box selection
+			if (e.type == EventType.MouseDown && e.button == 0 && e.alt && !_gizmo.IsDragging)
+			{
+				_isBoxSelecting = true;
+				_boxStart = e.mousePosition;
+				_boxEnd = e.mousePosition;
+				Input?.SetCameraEnabled(false);
+				e.Use();
+				return;
+			}
+			if (e.type == EventType.MouseDrag && e.button == 0 && _isBoxSelecting)
+			{
+				_boxEnd = e.mousePosition;
+				e.Use();
+				return;
+			}
+			if (e.type == EventType.MouseUp && e.button == 0 && _isBoxSelecting)
 			{
 				_isBoxSelecting = false;
-				if (!Input.CtrlHeld)
-				{
-					float xMin = Mathf.Min(_boxStart.x, _boxEnd.x);
-					float xMax = Mathf.Max(_boxStart.x, _boxEnd.x);
-					float yMin = Mathf.Min(_boxStart.y, _boxEnd.y);
-					float yMax = Mathf.Max(_boxStart.y, _boxEnd.y);
-					Rect screenRect = new Rect(xMin, yMin, xMax - xMin, yMax - yMin);
-					if (Input.AltHeld)
-						SelectionTool.DeselectBox(cam, screenRect);
-					else
-						SelectionTool.SelectBox(cam, screenRect, Input.ShiftHeld);
-					UpdateGizmoTarget(cachedVertices);
-				}
-			}
-			_gizmo.UpdateHover(mousePos, cam, targetTransform);
-			if (Input.MouseButtonDown && _gizmo.HoveredAxis != GizmoEnums.None)
-			{
-				if (!_gizmo.BeginDrag(mousePos, cam, targetTransform, activeLayer, cachedVertices)) return;
-				_gizmoBeforeSnapshot = new Dictionary<int, Vector3>(_gizmo.DragStartDeltas);
+				CommitBoxSelection(e.modifiers, cam, cachedVertices);
+				Input?.SetCameraEnabled(true);
+				e.Use();
 				return;
+			}
+
+			// LMB click on model (no Alt, no gizmo handle): single-vertex snap
+			if (e.type == EventType.MouseUp && e.button == 0 && !_gizmo.IsDragging && !e.alt && _hasHit)
+			{
+				TrySelectVertexAtHit(e.modifiers, cachedVertices);
+				UpdateGizmoTarget(cachedVertices);
+				e.Use();
+			}
+		}
+
+		private void CommitBoxSelection(EventModifiers mods, Camera cam, Vector3[] cachedVertices)
+		{
+			float boxW = Mathf.Abs(_boxEnd.x - _boxStart.x);
+			float boxH = Mathf.Abs(_boxEnd.y - _boxStart.y);
+			bool isClick = boxW < 5f && boxH < 5f;
+
+			if (isClick)
+			{
+				TrySelectVertexAtHit(mods, cachedVertices);
 			}
 			else
 			{
-				if (Input.MouseButton && _gizmo.IsDragging)
-				{
-					_gizmo.UpdateDrag(mousePos, cam, targetTransform, activeLayer, cachedVertices);
-					return;
-				}
+				// Box selection operates in GUI space; SelectBox/DeselectBox expect screen space (Y-flipped)
+				float xMin = Mathf.Min(_boxStart.x, _boxEnd.x);
+				float xMax = Mathf.Max(_boxStart.x, _boxEnd.x);
+				float yMin = Mathf.Min(_boxStart.y, _boxEnd.y);
+				float yMax = Mathf.Max(_boxStart.y, _boxEnd.y);
+				// Convert GUI rect to screen rect (flip Y)
+				float screenYMin = Screen.height - yMax;
+				float screenYMax = Screen.height - yMin;
+				Rect screenRect = new Rect(xMin, screenYMin, xMax - xMin, screenYMax - screenYMin);
+				if ((mods & EventModifiers.Control) != 0)
+					SelectionTool.DeselectBox(cam, screenRect);
+				else
+					SelectionTool.SelectBox(cam, screenRect, (mods & EventModifiers.Shift) != 0);
+			}
 
-				if (!Input.MouseButtonUp || !_gizmo.IsDragging) return;
-				_gizmo.EndDrag();
-				CommitGizmoUndoEntry(activeLayer);
+			UpdateGizmoTarget(cachedVertices);
+		}
+
+		private void TrySelectVertexAtHit(EventModifiers mods, Vector3[] cachedVertices)
+		{
+			// _lastHitPoint is already set by LateUpdate raycast; use it for vertex snap
+			if (!_hasHit)
+			{
+				if ((mods & (EventModifiers.Shift | EventModifiers.Control)) == 0)
+					SelectionTool.ClearSelection();
+				return;
+			}
+			float snapRadius = BlendShapeEditorPlugin.VertexSnapRadius.Value;
+			int bestIdx = -1;
+			float bestDist = snapRadius * snapRadius;
+			if (cachedVertices != null && SelectionTool.TargetTransform)
+			{
+				Transform xform = SelectionTool.TargetTransform;
+				for (int i = 0; i < cachedVertices.Length; i++)
+				{
+					float d = (xform.TransformPoint(cachedVertices[i]) - _lastHitPoint).sqrMagnitude;
+					if (d < bestDist)
+					{
+						bestDist = d;
+						bestIdx = i;
+					}
+				}
+			}
+			if (bestIdx >= 0)
+			{
+				if ((mods & EventModifiers.Shift) != 0)
+					SelectionTool.SelectedVertices.Add(bestIdx);
+				else if ((mods & EventModifiers.Control) != 0)
+					SelectionTool.SelectedVertices.Remove(bestIdx);
+				else
+				{
+					SelectionTool.ClearSelection();
+					SelectionTool.SelectedVertices.Add(bestIdx);
+				}
+			}
+			else if ((mods & (EventModifiers.Shift | EventModifiers.Control)) == 0)
+			{
+				SelectionTool.ClearSelection();
 			}
 		}
 
@@ -815,6 +920,9 @@ namespace BlendShapeEditor
 				_gizmo.ComputeMirrorSoftWeights(vertices, SelectionTool.Grid, adjacency);
 			_wireColorsDirty = true;
 		}
+
+		// Event.mousePosition uses GUI space (Y=0 at top); camera/gizmo methods expect screen space (Y=0 at bottom)
+		private static Vector2 GUIToScreenPos(Vector2 guiPos) => new Vector2(guiPos.x, Screen.height - guiPos.y);
 
 		private IDeformTool GetActiveBrushTool()
 		{
@@ -922,7 +1030,7 @@ namespace BlendShapeEditor
 		{
 			if (_edges == null || !_wireLineMesh)
 				return;
-			Camera main = Camera.main;
+			Camera main = _camera;
 			if (!main)
 				return;
 			Vector3 camPos = main.transform.position;
@@ -1007,10 +1115,11 @@ namespace BlendShapeEditor
 		{
 			GL.PushMatrix();
 			GL.LoadPixelMatrix();
+			// _boxStart/_boxEnd are GUI space (Y=0 at top); GL.LoadPixelMatrix uses screen space (Y=0 at bottom)
 			float xMin = Mathf.Min(_boxStart.x, _boxEnd.x);
 			float xMax = Mathf.Max(_boxStart.x, _boxEnd.x);
-			float yMin = Mathf.Min(_boxStart.y, _boxEnd.y);
-			float yMax = Mathf.Max(_boxStart.y, _boxEnd.y);
+			float yMin = Screen.height - Mathf.Max(_boxStart.y, _boxEnd.y);
+			float yMax = Screen.height - Mathf.Min(_boxStart.y, _boxEnd.y);
 			GL.Begin(7);
 			GL.Color(new Color(0.2f, 0.6f, 1f, 0.15f));
 			GL.Vertex3(xMin, yMin, 0f);
@@ -1184,7 +1293,7 @@ namespace BlendShapeEditor
 			Vector3[] vertices = mesh.vertices;
 			if (_wireVerts == null || _wireVerts.Length != vertices.Length)
 				_wireVerts = new Vector3[vertices.Length];
-			for (int i = 0; i < vertices.Length; i++)
+			for (var i = 0; i < vertices.Length; i++)
 				_wireVerts[i] = l2w.MultiplyPoint3x4(vertices[i]);
 			int instanceID = mesh.GetInstanceID();
 			if (_wireTris != null && _wireMeshId == instanceID) return;
@@ -1202,11 +1311,48 @@ namespace BlendShapeEditor
 		private void OnGUI()
 		{
 			Window?.DrawGUI();
-			if (Window != null && Window.IsEditMode)
+
+			if (Window == null || !Window.IsEditMode)
+				return;
+
+			DrawEditModeHud();
+
+			Event e = Event.current;
+
+			// Hotkeys — in Studio, game's UndoRedoManager handles Ctrl+Z/Y via BlendShapeEditorCommand
+			if (e.type == EventType.KeyDown && _undoStack != null && !StudioAPI.InsideStudio)
 			{
-				DrawEditModeHud();
-				Input?.ResetGameInput();
+				if (BlendShapeEditorPlugin.UndoKey.Value.IsDown() && _undoStack.CanUndo)
+				{
+					UndoOneStep();
+					e.Use();
+					return;
+				}
+				if (BlendShapeEditorPlugin.RedoKey.Value.IsDown() && _undoStack.CanRedo)
+				{
+					RedoOneStep();
+					e.Use();
+					return;
+				}
 			}
+
+			// Skip mouse interaction when cursor is over the UI panel
+			if (ShapeEditorWindow.IsMouseOverUI)
+				return;
+
+			Camera main = Camera.main;
+			if (!main || Input == null)
+				return;
+
+			DeformData activeDeformData = Window.ActiveDeformData;
+			if (activeDeformData == null)
+				return;
+			DeformLayer activeLayer = activeDeformData.ActiveLayer;
+
+			if (Window.OperationMode == ShapeEditorWindow.OpMode.Brush)
+				ProcessBrushEvent(e, main, activeLayer);
+			else
+				ProcessGizmoEvent(e, main, activeLayer);
 		}
 
 		private void DrawEditModeHud()
@@ -1323,13 +1469,13 @@ namespace BlendShapeEditor
 		public Action OnRefreshRenderers;
 		public Func<object> GetCurrentSelection;
 
+		private Camera _camera;
 		private Renderer _targetRenderer;
 		private ShapeDeformer _deformer;
 		private MoveTool _moveTool;
 		private SmoothTool _smoothTool;
 		private InflateTool _inflateTool;
 		private TransformGizmo _gizmo;
-		private Vector2 _prevMousePos;
 		private Material _cursorMaterial;
 		private Vector3 _lastHitPoint;
 		private Vector3 _lastHitNormal;

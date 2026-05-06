@@ -43,6 +43,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Undo\LayerRemoveUndoEntry.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Undo\LayerReorderUndoEntry.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Undo\LayerWeightUndoEntry.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Undo\StudioUndoBridge.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Undo\UndoContext.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Undo\UndoStack.cs" />
   </ItemGroup>
