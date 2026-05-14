@@ -32,7 +32,7 @@ namespace BlendShapeEditor
 		public static ConfigEntry<float> BrushStrengthScrollMod { get; private set; }
 		public static ConfigEntry<float> GizmoSizeScrollMod { get; private set; }
 		public static ConfigEntry<float> GizmoSoftSelectionScrollMod { get; private set; }
-		public static ConfigEntry<L.Language> UILanguage { get; private set; }
+		public static ConfigEntry<i18n.Language> UILanguage { get; private set; }
 		public static ConfigEntry<int> UndoMaxSteps { get; private set; }
 
 		#region Colors
@@ -262,14 +262,14 @@ namespace BlendShapeEditor
 			DefaultBrushStrength = Config.Bind("Blend Shape Editor", "Default Brush Strength", 0.5f,
 				new ConfigDescription("Default brush strength", new AcceptableValueRange<float>(0.01f, 1f)));
 
-			UILanguage = Config.Bind("General", "UI Language", L.Language.English,
+			UILanguage = Config.Bind("General", "UI Language", i18n.Language.English,
 				"UI display language");
 
 			UndoMaxSteps = Config.Bind("Blend Shape Editor", "Undo Max Steps", 50,
 				new ConfigDescription("Maximum number of undo steps", new AcceptableValueRange<int>(1, 200)));
 
-			L.SetLanguage(UILanguage.Value);
-			UILanguage.SettingChanged += (s, e) => L.SetLanguage(UILanguage.Value);
+			i18n.SetLanguage(UILanguage.Value);
+			UILanguage.SettingChanged += (s, e) => i18n.SetLanguage(UILanguage.Value);
 
 			Harmony.CreateAndPatchAll(typeof(Hooks), GUID);
 			
