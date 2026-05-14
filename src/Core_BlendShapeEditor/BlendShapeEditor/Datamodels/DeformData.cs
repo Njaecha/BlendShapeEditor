@@ -71,7 +71,7 @@ namespace BlendShapeEditor
 
 		public DeformLayer AddLayer(int vertexCount)
 		{
-			DeformLayer layer = new DeformLayer(string.Format(L.LayerDefaultNameFmt, Layers.Count + 1), vertexCount);
+			DeformLayer layer = new DeformLayer(string.Format(i18n.LayerDefaultNameFmt, Layers.Count + 1), vertexCount);
 			Layers.Add(layer);
 			ActiveLayerIndex = Layers.Count - 1;
 			return layer;

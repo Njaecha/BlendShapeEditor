@@ -35,6 +35,7 @@
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
     <ItemGroup>
+      <None Include="App.config" />
       <None Include="packages.config" />
     </ItemGroup>
     <ItemGroup>
@@ -73,6 +74,9 @@
       </Reference>
       <Reference Include="KK_MaterialEditor">
         <HintPath>..\..\AdditionalDependencies\KK_MaterialEditor-publicized.dll</HintPath>
+      </Reference>
+      <Reference Include="Newtonsoft.Json, Version=6.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+        <HintPath>..\packages\Newtonsoft.Json.6.0.3\lib\net35\Newtonsoft.Json.dll</HintPath>
       </Reference>
       <Reference Include="System" />
       <Reference Include="System.Core" />
