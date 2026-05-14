@@ -1,8 +1,9 @@
 using System;
+using System.Runtime.CompilerServices;
 using KKAPI.Maker;
 using UnityEngine;
 
-namespace KKShapeEditor
+namespace BlendShapeEditor
 {
 	public static class MakerUI
 	{
@@ -10,12 +11,13 @@ namespace KKShapeEditor
 		{
 			MakerAPI.MakerBaseLoaded += (s, e) => OnMakerLoaded();
 			MakerAPI.MakerExiting += (s, e) => OnMakerExit();
+			MaterialEditorBridge.UserInterfacePopulate += (sender, args) => RefreshRenderers();
 		}
 
 		private static void OnMakerLoaded()
 		{
 			_window = new ShapeEditorWindow(49382, new Rect(400f, 20f, 380f, 600f));
-			_overlayGo = new GameObject("KKShapeEditor_MakerOverlay");
+			_overlayGo = new GameObject("KKBlendShapeEditor_MakerOverlay");
 			_overlay = _overlayGo.AddComponent<ShapePaintOverlay>();
 			_overlay.Window = _window;
 			_overlay.SelectionTool = new SelectionTool();
@@ -49,13 +51,21 @@ namespace KKShapeEditor
 			if (!chaCtrl)
 				return;
 
-			ShapeEditorController controller = chaCtrl.gameObject.GetComponent<ShapeEditorController>();
-			if (!controller)
-				return;
+			if (_window.MatEditFilter)
+			{
+				MaterialEditorBridge.CurrentlyVisibleRenderers.ForEach(rend =>  _window.Renderers.Add(rend));
+			}
+			else
+			{
+				BlendShapeEditorCharaController controller = chaCtrl.gameObject.GetComponent<BlendShapeEditorCharaController>();
+				if (!controller)
+					return;
 
-			_window.Renderers = controller.GetAllRenderers();
+				_window.Renderers = controller.GetAllRenderers();
+			}
+
 			if (_window.SelectedRendererIndex >= _window.Renderers.Count)
-				_window.SelectedRendererIndex = 0;
+				_window.SelectedRendererIndex = -1;
 		}
 
 		public static ShapeEditorWindow Window => _window;

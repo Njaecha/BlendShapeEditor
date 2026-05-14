@@ -1,40 +1,47 @@
 using System;
 using System.Collections.Generic;
+using BepInEx.Configuration;
+using KKAPI.Utilities;
 using UnityEngine;
+using BSE = BlendShapeEditor.BlendShapeEditorPlugin;
 
-namespace KKShapeEditor
+namespace BlendShapeEditor
 {
 	public class ShapeEditorWindow
 	{
 		public static bool IsMouseOverUI { get; private set; }
 		public bool ShowMeshHighlight { get; set; }
+		public bool MatEditFilter { get; set; }
 		public OpMode OperationMode { get; set; }
 		public BrushToolType SelectedBrushTool { get; set; }
 		public float BrushRadius { get; set; }
 		public float BrushStrength { get; set; }
 		public FalloffMode BrushFalloff { get; set; }
-		public bool SymmetryEnabled { get; set; }
-		public int SymmetryAxisIndex { get; set; }
-		public float SymmetryCenter { get; set; }
-		public bool SymmetryCenterSet { get; set; }
-		public bool DeferSetSymmetryCenter { get; set; }
-		public bool DeferClearSymmetryCenter { get; set; }
+		public bool MirrorEnabled { get; set; }
+		public int MirrorAxisIndex { get; set; }
+		public float MirrorCenter { get; set; }
+		public bool MirrorCenterSet { get; set; }
+		public bool DeferSetMirrorCenter { get; set; }
+		public bool DeferClearMirrorCenter { get; set; }
 		public int GizmoModeIndex { get; set; }
 		public int GizmoSpaceIndex { get; set; }
 		public bool GizmoSoftSelection { get; set; }
 		public int SoftSelectModeIndex { get; set; }
 		public float GizmoSoftRadius { get; set; }
+		public float GizmoSizeFactor { get; set; }
 		public FalloffMode GizmoFalloff { get; set; }
-		public int SubdivideLevel { get; set; } = 1;
+		public bool CullBackVertices { get; set; }
+		public bool CullBackWireframe { get; set; } = true;
 		public bool IsEditMode { get; private set; }
 
 		public ShapeEditorWindow(int windowId, Rect initialRect)
 		{
 			_windowId = windowId;
 			_windowRect = initialRect;
-			BrushRadius = ShapeEditorPlugin.DefaultBrushRadius.Value;
-			BrushStrength = ShapeEditorPlugin.DefaultBrushStrength.Value;
+			BrushRadius = BSE.DefaultBrushRadius.Value;
+			BrushStrength = BSE.DefaultBrushStrength.Value;
 			GizmoSoftRadius = 0.1f;
+			GizmoSizeFactor = 0.10f;
 		}
 
 		public bool Visible { get; set; }
@@ -53,20 +60,20 @@ namespace KKShapeEditor
 		{
 			if (!Visible)
 				return;
-
+			
 			EnsureWindowStyle();
-			_windowRect = GUILayout.Window(_windowId, _windowRect, DrawWindow, "KKShapeEditor", _windowStyle, GUILayout.MinWidth(350f));
+			_windowRect = GUILayout.Window(_windowId, _windowRect, DrawWindow, string.Format(L.WindowTitleFmt, BSE.Version), _windowStyle, GUILayout.MinWidth(400f));
 
 			if (_showHelp)
 			{
-				_helpWindowRect = new Rect(_windowRect.xMax, _windowRect.y, 300f, _windowRect.height);
-				_helpWindowRect = GUI.Window(_windowId + 1, _helpWindowRect, DrawHelpWindow, "Help", _windowStyle);
+				_helpWindowRect = new Rect(_windowRect.xMax, _windowRect.y, 500f, _windowRect.height);
+				_helpWindowRect = GUI.Window(_windowId + 1, _helpWindowRect, DrawHelpWindow, L.HelpWindowTitle, _windowStyle);
 			}
 
 			Vector2 screenMouse = new Vector2(Input.mousePosition.x, (float)Screen.height - Input.mousePosition.y);
 			IsMouseOverUI = _windowRect.Contains(screenMouse) || (_showHelp && _helpWindowRect.Contains(screenMouse)) || GUIUtility.hotControl != 0;
-			if (IsMouseOverUI)
-				Input.ResetInputAxes();
+			if (_showHelp)
+				IMGUIUtils.EatInputInRect(_helpWindowRect);
 		}
 
 		private void DrawWindow(int id)
@@ -74,26 +81,33 @@ namespace KKShapeEditor
 			try
 			{
 				GUILayout.BeginVertical();
-				GUILayout.BeginHorizontal();
-				_tabIndex = GUILayout.Toolbar(_tabIndex, L.TabNames);
-				if (GUILayout.Button("?", GUILayout.Width(25f)))
+				if (GUI.Button(new Rect(new Vector2(_windowRect.width-25, 5), new Vector2(20, 20)),"?"))
 					_showHelp = !_showHelp;
-				GUILayout.EndHorizontal();
+				
+				Color guic = GUI.color;
+				if (MatEditFilter) GUI.color = Color.magenta;
+				bool prevMef = MatEditFilter;
+				MatEditFilter = GUI.Toggle(new Rect(5,2,110,20),MatEditFilter, new GUIContent(L.MaterialEditorFilter, L.MaterialEditorFilterTooltip));
+				if (prevMef != MatEditFilter)
+				{
+					DeferRefreshRenderers = true;
+				}
+				GUI.color = guic;
+				
 				GUILayout.Space(5f);
 
-				if (_tabIndex == 0)
-					DrawShapeTab();
-				else if (_tabIndex == 1)
-					DrawSubdivideTab();
+				DrawShapeTab();
 
 				GUILayout.EndVertical();
 			}
 			catch (Exception ex)
 			{
 				GUILayout.EndVertical();
-				ShapeEditorPlugin.Logger.LogWarning("GUI draw error: " + ex.Message);
+				BSE.Logger.LogWarning("GUI draw error: " + ex.Message);
 			}
-			GUI.DragWindow();
+			
+			IMGUIUtils.DrawTooltip(_windowRect, 200);
+			_windowRect = IMGUIUtils.DragResizeEatWindow(id,  _windowRect);
 		}
 
 		private void DrawHelpWindow(int id)
@@ -102,10 +116,41 @@ namespace KKShapeEditor
 				_helpLabelStyle = new GUIStyle(GUI.skin.label) { wordWrap = true };
 
 			_helpScroll = GUILayout.BeginScrollView(_helpScroll);
-			string text = _tabIndex == 0
-				? (OperationMode == OpMode.Brush ? L.HelpBrush : L.HelpGizmo)
-				: L.HelpSubdivide;
-			GUILayout.Label(text, _helpLabelStyle);
+			Color guic = GUI.color;
+			GUI.color = Color.red;
+			GUILayout.Label(L.HelpWarning, "Box");
+			GUI.color = guic;
+			GUILayout.Label(L.HelpRenderersHeader, "Box");
+			GUILayout.Label(L.HelpRenderers, _helpLabelStyle);
+			if (IsEditMode)
+			{
+				if (OperationMode == OpMode.Brush)
+				{
+					GUILayout.Label(L.HelpBrushToolsHeader, "Box");
+					GUILayout.Label(string.Format(L.HelpBrushTools, BSE.KeyBrushMove.S(), BSE.KeyBrushSmooth.S(), BSE.KeyBrushInflate.S()), _helpLabelStyle);
+					GUILayout.Label(L.HelpBrushParamsHeader, "Box");
+					GUILayout.Label(L.HelpBrushParams, _helpLabelStyle);
+				}
+				else
+				{
+					GUILayout.Label(L.HelpGizmoSelectionHeader, "Box");
+					GUILayout.Label(L.HelpGizmoSelection, _helpLabelStyle);
+					GUILayout.Label(L.HelpGizmoToolsHeader, "Box");
+					GUILayout.Label(string.Format(L.HelpGizmoTools, BSE.KeyGizmoTranslate.S(), BSE.KeyGizmoRotate.S(), BSE.KeyGizmoScale.S()), _helpLabelStyle);
+					GUILayout.Label(string.Format(L.HelpGizmoSpaceHeader, BSE.KeyGizmoCycleGizmoSpace.S()), "Box");
+					GUILayout.Label(L.HelpGizmoSpace, _helpLabelStyle);
+					GUILayout.Label(string.Format(L.HelpGizmoSoftSelectionHeader, BSE.KeyGizmoSoftSelection.S()), "Box");
+					GUILayout.Label(string.Format(L.HelpGizmoSoftSelection, BSE.KeyGizmoCycleSoftMode.S()), _helpLabelStyle);
+				}
+			}
+			GUILayout.Label(string.Format(L.HelpMirrorHeader, BSE.KeyMirror.S()), "Box");
+			GUILayout.Label(L.HelpMirror, _helpLabelStyle);
+			GUILayout.Label(L.HelpLayersHeader, "Box");
+			GUILayout.Label(string.Format(L.HelpLayers, BSE.KeyLayerNew.S(), BSE.KeyLayerRemove.S(), BSE.KeyLayerNext.S(), BSE.KeyLayerPrevious.S(), BSE.KeyLayerDown.S(), BSE.KeyLayerUp.S(), BSE.KeyLayerOpacityDown.S(), BSE.KeyLayerOpacityUp.S()), _helpLabelStyle);
+			GUILayout.Label(L.HelpBakeHeader, "Box");
+			GUILayout.Label(L.HelpBake, _helpLabelStyle);
+			GUILayout.Label(L.HelpAdditionalHeader, "Box");
+			GUILayout.Label(string.Format(L.HelpAdditional, BSE.KeyUndo.S(), BSE.KeyRedo.S()), _helpLabelStyle);
 			GUILayout.EndScrollView();
 		}
 
@@ -117,31 +162,45 @@ namespace KKShapeEditor
 
 			if (!IsEditMode)
 			{
-				bool prev = GUI.enabled;
-				if (FaceSelect)
-					GUI.enabled = false;
+				if (SelectedRendererIndex == -1) GUI.enabled = false;
 				if (GUILayout.Button(L.EnterEditMode))
 					DeferEnterEditMode = true;
-				GUI.enabled = prev;
+				GUI.enabled = true;
 				return;
 			}
 
 			if (GUILayout.Button(L.ExitEditMode))
 				DeferExitEditMode = true;
+			DrawCullingToggles();
 			GUILayout.Space(5f);
 
 			if (activeDeformData == null || !activeDeformData.HasLayers)
 			{
+				Color guic = GUI.color;
+				GUI.color = Color.yellow;
 				GUILayout.Label(L.NoLayerWarning);
+				GUI.color = guic;
 				DrawLayerPanel(activeDeformData);
 				return;
 			}
 
 			GUILayout.BeginHorizontal();
+			if (Hotkey(BSE.KeyMode))
+			{
+				OperationMode = OperationMode == OpMode.Brush ? OpMode.Gizmo : OpMode.Brush;
+				DeferUpdateWireColors = true;
+			}
 			if (GUILayout.Toggle(OperationMode == OpMode.Brush, L.BrushMode, "Button"))
+			{
 				OperationMode = OpMode.Brush;
+				DeferUpdateWireColors = true;
+			}
+			GUILayout.Label($"[{BSE.KeyMode.S()}]", _labelTextCenterStyle, GUILayout.Width(30));
 			if (GUILayout.Toggle(OperationMode == OpMode.Gizmo, L.GizmoMode, "Button"))
+			{
 				OperationMode = OpMode.Gizmo;
+				DeferUpdateWireColors = true;
+			}
 			GUILayout.EndHorizontal();
 			GUILayout.Space(3f);
 
@@ -152,47 +211,56 @@ namespace KKShapeEditor
 
 			GUILayout.Space(8f);
 			DrawLayerPanel(activeDeformData);
-
-			if (IsOnCharacter)
-				DrawWeightRemapControls();
+			GUILayout.Space(5f);
+			GUILayout.FlexibleSpace();
+			DrawBakeControls();
 		}
 
-		private void DrawWeightRemapControls()
+		private void DrawBakeControls()
 		{
-			GUILayout.Space(5f);
+			GUILayout.Label(L.BakeHeader, "Box");
 			GUILayout.BeginHorizontal();
-			bool prev = GUI.enabled;
-			if (!BodyMeshReadable)
-			{
-				GUI.enabled = false;
-				GUILayout.Button(L.RemapWeights);
-				GUI.enabled = prev;
-			}
-			else if (GUILayout.Button(L.RemapWeights))
-			{
-				DeferRemapWeights = true;
-			}
-			if (GUILayout.Button(L.RestoreWeights))
-				DeferRestoreWeights = true;
+			GUILayout.Label(L.BakeNameLabel, GUILayout.Width(45f));
+			_bakeNameInput = GUILayout.TextField(_bakeNameInput);
 			GUILayout.EndHorizontal();
-			if (!BodyMeshReadable)
-				GUILayout.Label(L.BodyMeshNotReadable);
+
+			bool hasLayers = ActiveDeformData != null && ActiveDeformData.HasLayers;
+			bool prev = GUI.enabled;
+			if (!hasLayers || !IsEditMode)
+				GUI.enabled = false;
+			if (GUILayout.Button(L.BakeButton))
+			{
+				BakeShapeName = _bakeNameInput;
+				DeferBake = true;
+			}
+			GUI.enabled = prev;
 		}
 
 		private void DrawBrushControls()
 		{
 			GUILayout.BeginHorizontal();
-			if (GUILayout.Toggle(SelectedBrushTool == BrushToolType.Move, L.MoveTool, "Button"))
+			Color guic = GUI.color;
+			GUI.color = BSE.BrushColorMove.Value;
+			if (Hotkey(BSE.KeyBrushMove) || GUILayout.Toggle(SelectedBrushTool == BrushToolType.Move, new GUIContent(string.Format(L.MoveToolLabelFmt, BSE.KeyBrushMove.S()), string.Format(L.MoveToolTooltipFmt, BSE.KeyBrushMove.S())), "Button"))
 				SelectedBrushTool = BrushToolType.Move;
-			if (GUILayout.Toggle(SelectedBrushTool == BrushToolType.Smooth, L.SmoothTool, "Button"))
+			GUI.color = BSE.BrushColorSmooth.Value;
+			if (Hotkey(BSE.KeyBrushSmooth) || GUILayout.Toggle(SelectedBrushTool == BrushToolType.Smooth, new GUIContent(string.Format(L.SmoothToolLabelFmt, BSE.KeyBrushSmooth.S()), string.Format(L.SmoothToolTooltipFmt, BSE.KeyBrushSmooth.S())), "Button"))
 				SelectedBrushTool = BrushToolType.Smooth;
-			if (GUILayout.Toggle(SelectedBrushTool == BrushToolType.Inflate, L.InflateTool, "Button"))
+			GUI.color = BSE.BrushColorInflate.Value;
+			if (Hotkey(BSE.KeyBrushInflate) || GUILayout.Toggle(SelectedBrushTool == BrushToolType.Inflate, new GUIContent(string.Format(L.InflateToolLabelFmt, BSE.KeyBrushInflate.S()), string.Format(L.InflateToolTooltipFmt, BSE.KeyBrushInflate.S())), "Button"))
 				SelectedBrushTool = BrushToolType.Inflate;
+			GUI.color = guic;
 			GUILayout.EndHorizontal();
 
+			GUILayout.BeginHorizontal();
 			GUILayout.Label(string.Format(L.BrushRadiusFmt, BrushRadius.ToString("F3")));
+			GUILayout.Label(L.ScrollHint, _labelTextRightStyle);
+			GUILayout.EndHorizontal();
 			BrushRadius = GUILayout.HorizontalSlider(BrushRadius, 0.001f, 0.5f);
+			GUILayout.BeginHorizontal();
 			GUILayout.Label(string.Format(L.StrengthFmt, BrushStrength.ToString("F2")));
+			GUILayout.Label(L.AltScrollHint, _labelTextRightStyle);
+			GUILayout.EndHorizontal();
 			BrushStrength = GUILayout.HorizontalSlider(BrushStrength, 0.01f, 1f);
 
 			GUILayout.BeginHorizontal();
@@ -204,40 +272,62 @@ namespace KKShapeEditor
 				BrushFalloff = FalloffMode.Sharp;
 			GUILayout.EndHorizontal();
 
-			DrawSymmetryControls();
+			DrawMirrorControls();
 		}
 
 		private void DrawGizmoControls()
 		{
 			GUILayout.BeginHorizontal();
-			if (GUILayout.Toggle(GizmoModeIndex == 0, L.Translate, "Button"))
+			if (Hotkey(BSE.KeyGizmoTranslate) || GUILayout.Toggle(GizmoModeIndex == 0, string.Format(L.TranslateLabelFmt, BSE.KeyGizmoTranslate.S()), "Button"))
 				GizmoModeIndex = 0;
-			if (GUILayout.Toggle(GizmoModeIndex == 1, L.Rotate, "Button"))
+			if (Hotkey(BSE.KeyGizmoRotate) || GUILayout.Toggle(GizmoModeIndex == 1, string.Format(L.RotateLabelFmt, BSE.KeyGizmoRotate.S()), "Button"))
 				GizmoModeIndex = 1;
-			if (GUILayout.Toggle(GizmoModeIndex == 2, L.Scale, "Button"))
+			if (Hotkey(BSE.KeyGizmoScale) || GUILayout.Toggle(GizmoModeIndex == 2, string.Format(L.ScaleLabelFmt, BSE.KeyGizmoScale.S()), "Button"))
 				GizmoModeIndex = 2;
 			GUILayout.EndHorizontal();
 
+			if (Hotkey(BSE.KeyGizmoCycleGizmoSpace))
+			{
+				GizmoSpaceIndex++;
+				if (GizmoSpaceIndex > 2) GizmoSpaceIndex = 0;
+			}
 			GUILayout.BeginHorizontal();
-			if (GUILayout.Toggle(GizmoSpaceIndex == 0, L.WorldSpace, "Button"))
+			if (GUILayout.Toggle(GizmoSpaceIndex == 0, new GUIContent(L.WorldSpace, string.Format(L.WorldSpaceTooltipFmt, BSE.KeyGizmoCycleGizmoSpace)), "Button"))
 				GizmoSpaceIndex = 0;
-			if (GUILayout.Toggle(GizmoSpaceIndex == 1, L.ObjectSpace, "Button"))
+			if (GUILayout.Toggle(GizmoSpaceIndex == 1, new GUIContent(L.ObjectSpace, string.Format(L.ObjectSpaceTooltipFmt, BSE.KeyGizmoCycleGizmoSpace)), "Button"))
 				GizmoSpaceIndex = 1;
-			if (GUILayout.Toggle(GizmoSpaceIndex == 2, L.NormalSpace, "Button"))
+			if (GUILayout.Toggle(GizmoSpaceIndex == 2, new GUIContent(L.NormalSpace, string.Format(L.NormalSpaceTooltipFmt, BSE.KeyGizmoCycleGizmoSpace)), "Button"))
 				GizmoSpaceIndex = 2;
 			GUILayout.EndHorizontal();
+			
+			GUILayout.BeginHorizontal();
+			GUILayout.Label(string.Format(L.GizmoSizeFactorFmt, GizmoSizeFactor));
+			GUILayout.Label(L.AltScrollHint, _labelTextRightStyle);
+			GUILayout.EndHorizontal();
+			GizmoSizeFactor = GUILayout.HorizontalSlider(GizmoSizeFactor, 0.01f, 0.15f);
 
+			if (Hotkey(BSE.KeyGizmoSoftSelection)) GizmoSoftSelection = !GizmoSoftSelection;
+			GUILayout.BeginHorizontal();
 			GizmoSoftSelection = GUILayout.Toggle(GizmoSoftSelection, L.SoftSelection);
+			GUILayout.Label($"[{BSE.KeyGizmoSoftSelection.S()}]", _labelTextRightStyle);
+			GUILayout.EndHorizontal();
 			if (GizmoSoftSelection)
 			{
+				if (Hotkey(BSE.KeyGizmoSoftSelection))
+				{
+					SoftSelectModeIndex = SoftSelectModeIndex == 0 ? 1 : 0;
+				}
 				GUILayout.BeginHorizontal();
-				if (GUILayout.Toggle(SoftSelectModeIndex == 0, L.SoftModeVolume, "Button"))
+				if (GUILayout.Toggle(SoftSelectModeIndex == 0, new GUIContent(L.SoftModeVolume, string.Format(L.SoftModeVolumeTooltipFmt, BSE.KeyGizmoSoftSelection.S())), "Button"))
 					SoftSelectModeIndex = 0;
-				if (GUILayout.Toggle(SoftSelectModeIndex == 1, L.SoftModeSurface, "Button"))
+				if (GUILayout.Toggle(SoftSelectModeIndex == 1, new GUIContent(L.SoftModeSurface, string.Format(L.SoftModeSurfaceTooltipFmt, BSE.KeyGizmoSoftSelection.S())), "Button"))
 					SoftSelectModeIndex = 1;
 				GUILayout.EndHorizontal();
 
-				GUILayout.Label($"{L.SoftSelectionRadius}: {GizmoSoftRadius:F3}");
+				GUILayout.BeginHorizontal();
+				GUILayout.Label(string.Format(L.SoftSelectionRadiusFmt, GizmoSoftRadius));
+				GUILayout.Label(L.ScrollHint, _labelTextRightStyle);
+				GUILayout.EndHorizontal();
 				GizmoSoftRadius = GUILayout.HorizontalSlider(GizmoSoftRadius, 0.001f, 0.5f);
 
 				GUILayout.BeginHorizontal();
@@ -250,40 +340,52 @@ namespace KKShapeEditor
 				GUILayout.EndHorizontal();
 			}
 
-			DrawSymmetryControls();
+			DrawMirrorControls();
 		}
 
-		private void DrawSymmetryControls()
+		private void DrawCullingToggles()
 		{
-			SymmetryEnabled = GUILayout.Toggle(SymmetryEnabled, L.Symmetry);
-			if (!SymmetryEnabled)
+			GUILayout.BeginHorizontal();
+			CullBackVertices = GUILayout.Toggle(CullBackVertices, L.CullBackVertices);
+			CullBackWireframe = GUILayout.Toggle(CullBackWireframe, L.CullBackWireframe);
+			GUILayout.EndHorizontal();
+		}
+
+		private void DrawMirrorControls()
+		{
+			if (Hotkey(BSE.KeyMirror)) MirrorEnabled = !MirrorEnabled;
+			GUILayout.BeginHorizontal();
+			MirrorEnabled = GUILayout.Toggle(MirrorEnabled, L.Mirror);
+			GUILayout.Label($"[{BSE.KeyMirror.S()}]", _labelTextRightStyle);
+			GUILayout.EndHorizontal();
+			if (!MirrorEnabled)
 				return;
 
 			GUILayout.BeginHorizontal();
 			GUILayout.Label(L.SymmetryAxis, GUILayout.Width(30f));
-			if (GUILayout.Toggle(SymmetryAxisIndex == 0, "X", "Button"))
-				SymmetryAxisIndex = 0;
-			if (GUILayout.Toggle(SymmetryAxisIndex == 1, "Y", "Button"))
-				SymmetryAxisIndex = 1;
-			if (GUILayout.Toggle(SymmetryAxisIndex == 2, "Z", "Button"))
-				SymmetryAxisIndex = 2;
+			if (GUILayout.Toggle(MirrorAxisIndex == 0, "X", "Button"))
+				MirrorAxisIndex = 0;
+			if (GUILayout.Toggle(MirrorAxisIndex == 1, "Y", "Button"))
+				MirrorAxisIndex = 1;
+			if (GUILayout.Toggle(MirrorAxisIndex == 2, "Z", "Button"))
+				MirrorAxisIndex = 2;
 			GUILayout.EndHorizontal();
 
-			if (SymmetryCenterSet)
-				GUILayout.Label(string.Format(L.SymmetryCenterFmt, SymmetryCenter));
+			if (MirrorCenterSet)
+				GUILayout.Label(string.Format(L.MirrorCenterFmt, MirrorCenter));
 
 			GUILayout.BeginHorizontal();
 			if (GUILayout.Button(L.SetCenter))
-				DeferSetSymmetryCenter = true;
+				DeferSetMirrorCenter = true;
 			if (GUILayout.Button(L.ClearCenter))
-				DeferClearSymmetryCenter = true;
+				DeferClearMirrorCenter = true;
 			GUILayout.EndHorizontal();
 		}
 
 		private void DrawLayerPanel(DeformData data)
 		{
-			GUILayout.Label(L.Layers);
-			if (GUILayout.Button(L.AddLayer))
+			GUILayout.Label(L.Layers, "Box");
+			if (Hotkey(BSE.KeyLayerNew) || GUILayout.Button(string.Format(L.AddLayerFmt, BSE.KeyLayerNew.S())))
 				DeferLayerAdd = true;
 
 			if (data == null || data.Layers.Count == 0)
@@ -294,19 +396,15 @@ namespace KKShapeEditor
 			{
 				DeformLayer layer = data.Layers[i];
 				bool isActive = data.ActiveLayerIndex == i;
-				GUILayout.BeginHorizontal();
-
-				Color prevBg = GUI.backgroundColor;
-				if (isActive)
-					GUI.backgroundColor = new Color(0.4f, 0.8f, 1f);
-				if (GUILayout.Toggle(isActive, "", GUILayout.Width(20f)))
-					data.SetActiveLayer(i);
-				GUI.backgroundColor = prevBg;
-
+				
+				Color guic = GUI.color;
+				if (isActive) GUI.color = new Color(0.4f, 0.8f, 1f);
+				GUILayout.BeginHorizontal("Box");
+				GUI.color = guic;
 				if (_renamingLayerIndex == i)
 				{
-					_renamingText = GUILayout.TextField(_renamingText, GUILayout.Width(100f));
-					if (GUILayout.Button("OK", GUILayout.Width(30f)))
+					_renamingText = GUILayout.TextField(_renamingText, GUILayout.MinWidth(100f));
+					if (GUILayout.Button("OK", _smallButtonStyle, GUILayout.Width(30f)))
 					{
 						if (!string.IsNullOrEmpty(_renamingText))
 							data.RenameLayer(i, _renamingText);
@@ -314,11 +412,17 @@ namespace KKShapeEditor
 					}
 				}
 				else
-				{
-					GUILayout.Label(layer.Name, GUILayout.Width(100f));
+				{ 
+					guic = GUI.color;
+					if (isActive) GUI.color = new Color(0.4f, 0.8f, 1f);
+					if (GUILayout.Button(new GUIContent(layer.Name, string.Format(L.LayerSelectTooltipFmt, BSE.KeyLayerNext.S(), BSE.KeyLayerPrevious.S())), _layerButtonStyle, GUILayout.MinWidth(100f)))
+					{
+						data.SetActiveLayer(i);
+					}
+					GUI.color = guic;
 				}
 
-				float newWeight = GUILayout.HorizontalSlider(layer.Weight, 0f, 1f, GUILayout.Width(60f));
+				float newWeight = GUILayout.HorizontalSlider(layer.Weight, 0f, 1f, slider: _layerSliderStyle, GUI.skin.horizontalSliderThumb, GUILayout.Width(80f));
 				if (!Mathf.Approximately(newWeight, layer.Weight))
 				{
 					if (_weightSliderLayer != i)
@@ -337,131 +441,73 @@ namespace KKShapeEditor
 				}
 
 				GUILayout.Label(layer.Weight.ToString("F2"), GUILayout.Width(30f));
+				if (i == 0) GUI.enabled = false;
+				if (GUILayout.Button(new GUIContent("˄", string.Format(L.LayerMoveUpTooltipFmt, BSE.KeyLayerUp.S())), _smallButtonStyle, GUILayout.Width(20f)))
+				{
+					DeferLayerMoveUp = i;
+				}
+				GUI.enabled = true;
+				if (i == data.Layers.Count - 1) GUI.enabled = false;
+				if (GUILayout.Button(new GUIContent("˅", string.Format(L.LayerMoveDownTooltipFmt, BSE.KeyLayerDown.S())), _smallButtonStyle, GUILayout.Width(20f)))
+				{
+					DeferLayerMoveDown = i;
+				}
+				GUI.enabled = true;
+				if (GUILayout.Button(new GUIContent("R", L.LayerRenameTooltip), _smallButtonStyle, GUILayout.Width(20f)))
+				{
+					_renamingLayerIndex = i;
+					_renamingText = data.Layers[i].Name;
+				}
+				Color guicColor = GUI.color;
+				GUI.color = Color.red;
+				if (GUILayout.Button(new GUIContent("╳", string.Format(L.LayerRemoveTooltipFmt, BSE.KeyLayerRemove.S())), _smallButtonStyle, GUILayout.Width(20f)))
+				{
+					DeferLayerRemove = i;
+				}
+				GUI.color = guicColor;
+				
+				
 				GUILayout.EndHorizontal();
 			}
 			GUILayout.EndScrollView();
 
-			int activeIdx = data.ActiveLayerIndex;
-			GUILayout.BeginHorizontal();
-			if (GUILayout.Button(L.RemoveLayer) && activeIdx >= 0)
-				DeferLayerRemove = activeIdx;
-			if (GUILayout.Button(L.RenameLayer) && activeIdx >= 0)
+			if (Hotkey(BSE.KeyLayerNext) && data.ActiveLayerIndex < data.Layers.Count - 1)
 			{
-				_renamingLayerIndex = activeIdx;
-				_renamingText = data.Layers[activeIdx].Name;
-			}
-			if (GUILayout.Button(L.MoveUp) && activeIdx > 0)
-				DeferLayerMoveUp = activeIdx;
-			if (GUILayout.Button(L.MoveDown) && activeIdx < data.Layers.Count - 1)
-				DeferLayerMoveDown = activeIdx;
-			GUILayout.EndHorizontal();
-		}
-
-		private void DrawSubdivideTab()
-		{
-			DrawRendererSelection();
-			if (SelectedRendererIndex < 0 || SelectedRendererIndex >= Renderers.Count)
-				return;
-
-			Renderer renderer = Renderers[SelectedRendererIndex];
-			if (!renderer)
-				return;
-
-			Mesh mesh = GetMeshFromRenderer(renderer);
-			if (!mesh)
-				return;
-
-			int totalFaces = MeshHelper.GetTotalFaceCount(mesh);
-			GUILayout.Label(string.Format(L.VerticesFacesFmt, mesh.vertexCount, totalFaces));
-			GUILayout.Space(5f);
-
-			bool faceSelectActive = FaceSelect;
-			bool prev = GUI.enabled;
-			if (IsEditMode)
-				GUI.enabled = false;
-			bool newFaceSelectActive = GUILayout.Toggle(faceSelectActive, L.SelectFaces);
-			if (IsEditMode)
-				GUI.enabled = prev;
-
-			if (newFaceSelectActive != faceSelectActive)
-			{
-				if (newFaceSelectActive)
-				{
-					FaceSelect = FaceSelectOverlay.Create(renderer);
-				}
-				else if (FaceSelect)
-				{
-					UnityEngine.Object.Destroy(FaceSelect.gameObject);
-					FaceSelect = null;
-				}
+				data.SetActiveLayer(data.ActiveLayerIndex + 1);
 			}
 
-			if (FaceSelect)
+			if (Hotkey(BSE.KeyLayerDown) && data.ActiveLayerIndex < data.Layers.Count - 1)
 			{
-				GUILayout.BeginHorizontal();
-				if (GUILayout.Toggle(!FaceSelect.BoxSelectMode, L.Brush, "Button"))
-					FaceSelect.BoxSelectMode = false;
-				if (GUILayout.Toggle(FaceSelect.BoxSelectMode, L.BoxSelect, "Button"))
-					FaceSelect.BoxSelectMode = true;
-				GUILayout.EndHorizontal();
-
-				if (!FaceSelect.BoxSelectMode)
-				{
-					GUILayout.Label(string.Format(L.BrushRadiusFmt, FaceSelect.BrushRadius.ToString("F3")));
-					FaceSelect.BrushRadius = GUILayout.HorizontalSlider(FaceSelect.BrushRadius, 0.001f, 0.5f);
-				}
-
-				GUILayout.Label(string.Format(L.SelectedFacesFmt, FaceSelect.SelectedFaces.Count, FaceSelect.TotalFaces));
-				GUILayout.BeginHorizontal();
-				if (GUILayout.Button(L.AllButton, GUILayout.Width(40f)))
-					DeferFaceSelectAll = true;
-				if (GUILayout.Button(L.NoneButton, GUILayout.Width(50f)))
-					DeferFaceSelectNone = true;
-				if (GUILayout.Button(L.InvertButton, GUILayout.Width(55f)))
-					DeferFaceSelectInvert = true;
-				GUILayout.EndHorizontal();
+				DeferLayerMoveDown = data.ActiveLayerIndex;
 			}
 
-			GUILayout.Space(3f);
-			if (IsEditMode)
-				GUI.enabled = false;
-
-			GUILayout.BeginHorizontal();
-			GUILayout.Label(L.LevelLabel, GUILayout.Width(40f));
-			if (GUILayout.Toggle(SubdivideLevel == 1, "1", "Button", GUILayout.Width(30f)))
-				SubdivideLevel = 1;
-			if (GUILayout.Toggle(SubdivideLevel == 2, "2", "Button", GUILayout.Width(30f)))
-				SubdivideLevel = 2;
-			if (GUILayout.Toggle(SubdivideLevel == 3, "3", "Button", GUILayout.Width(30f)))
-				SubdivideLevel = 3;
-
-			if (GUILayout.Button(L.Subdivide, GUILayout.Width(80f)))
+			if (Hotkey(BSE.KeyLayerPrevious) && data.ActiveLayerIndex > 0)
 			{
-				if (ActiveDeformData != null && ActiveDeformData.HasLayers)
-					ShowSubdivideLayerWarning = true;
-				else
-					DeferSubdivide = true;
+				data.SetActiveLayer(data.ActiveLayerIndex - 1);
 			}
-			if (MeshHelper.HasOriginal(renderer) && GUILayout.Button(L.Restore, GUILayout.Width(70f)))
-				DeferRestore = true;
-			GUILayout.EndHorizontal();
-
-			if (IsEditMode)
-				GUI.enabled = prev;
-
-			if (ShowSubdivideLayerWarning)
+			
+			if (Hotkey(BSE.KeyLayerUp) && data.ActiveLayerIndex > 0)
 			{
-				GUILayout.Space(5f);
-				GUILayout.Label(L.SubdivideLayerWarning);
-				GUILayout.BeginHorizontal();
-				if (GUILayout.Button(L.ApplyButton, GUILayout.Width(80f)))
-				{
-					ShowSubdivideLayerWarning = false;
-					DeferSubdivide = true;
-				}
-				if (GUILayout.Button(L.ClearButton, GUILayout.Width(80f)))
-					ShowSubdivideLayerWarning = false;
-				GUILayout.EndHorizontal();
+				DeferLayerMoveUp = data.ActiveLayerIndex;
+			}
+
+			if (Hotkey(BSE.KeyLayerRemove))
+			{
+				DeferLayerRemove = data.ActiveLayerIndex;
+			}
+
+			if (Hotkey(BSE.KeyLayerOpacityUp))
+			{
+				float weight = data.ActiveLayer.Weight;
+				if (weight + 0.1f > 1f) data.SetLayerWeight(data.ActiveLayerIndex, 1f);
+				data.SetLayerWeight(data.ActiveLayerIndex, weight+0.1f);
+			}
+
+			if (Hotkey(BSE.KeyLayerOpacityDown))
+			{
+				float weight = data.ActiveLayer.Weight;
+				if (weight - 0.1f < 0f) data.SetLayerWeight(data.ActiveLayerIndex, 0f);
+				data.SetLayerWeight(data.ActiveLayerIndex, weight-0.1f);
 			}
 		}
 
@@ -469,12 +515,36 @@ namespace KKShapeEditor
 		{
 			if (Renderers.Count == 0)
 			{
-				GUILayout.Label(L.SelectObject);
+				Color guic = GUI.color;
+				GUI.color = Color.red;
+				GUILayout.Label(!MatEditFilter
+					? L.SelectObject
+					: L.MaterialEditorNoRenderers);
+				GUI.color = guic;
 				return;
 			}
 
+			if (IsEditMode && !_expandRendererPanel)
+			{
+				GUILayout.Space(5);
+				if (GUILayout.Button("▶ Expand renderer selection"))
+				{
+					_expandRendererPanel = true;
+				}
+				return;
+			}
+			
 			ShowMeshHighlight = GUILayout.Toggle(ShowMeshHighlight, L.ShowMeshHighlight);
+			GUILayout.BeginHorizontal();
 			GUILayout.Label(L.TargetMesh);
+			if (IsEditMode)
+			{
+				if (GUILayout.Button("▼ Hide renderer selection"))
+				{
+					_expandRendererPanel = false;
+				}
+			}
+			GUILayout.EndHorizontal();
 			_rendererFilter = GUILayout.TextField(_rendererFilter);
 
 			bool filtering = !string.IsNullOrEmpty(_rendererFilter);
@@ -482,56 +552,50 @@ namespace KKShapeEditor
 			if (IsEditMode)
 				GUI.enabled = false;
 
-			_rendererScroll = GUILayout.BeginScrollView(_rendererScroll, GUILayout.Height(80f));
+			_rendererScroll = GUILayout.BeginScrollView(_rendererScroll, "Box", GUILayout.Height(80f));
 			for (var i = 0; i < Renderers.Count; i++)
 			{
 				if (!Renderers[i])
 					continue;
 				if (filtering && Renderers[i].name.IndexOf(_rendererFilter, StringComparison.OrdinalIgnoreCase) < 0)
 					continue;
-				if (GUILayout.Toggle(SelectedRendererIndex == i, Renderers[i].name, "Button"))
+				string name = Renderers[i].name;
+				if (!(Renderers[i] is SkinnedMeshRenderer smr))
+				{
+					name += L.NotSkinnedSuffix;
+					GUI.enabled = false;
+				}
+				Color guic = GUI.color;
+				if (SelectedRendererIndex == i) GUI.color = Color.cyan;
+				if (GUILayout.Toggle(SelectedRendererIndex == i, name, "Button"))
 					SelectedRendererIndex = i;
+				GUI.color = guic;
+				GUI.enabled = true;
 			}
 			GUILayout.EndScrollView();
 
 			if (IsEditMode)
 				GUI.enabled = prev;
-
-			GUILayout.BeginHorizontal();
-			bool hasLayers = ActiveDeformData != null && ActiveDeformData.Layers.Count > 0;
-			bool prev2 = GUI.enabled;
-			if (!hasLayers)
-				GUI.enabled = false;
-			if (GUILayout.Button(L.ExportDeform))
-				DeferExport = true;
-			GUI.enabled = prev2;
-
-			bool rendererValid = SelectedRendererIndex >= 0 && SelectedRendererIndex < Renderers.Count && Renderers[SelectedRendererIndex] != null;
-			bool prev3 = GUI.enabled;
-			if (!rendererValid || !IsEditMode)
-				GUI.enabled = false;
-			if (GUILayout.Button(L.ImportDeform))
-				DeferImport = true;
-			GUI.enabled = prev3;
-			GUILayout.EndHorizontal();
 		}
 
-		private static Mesh GetMeshFromRenderer(Renderer r)
+		public void IncrementBakeShapeName()
 		{
-			SkinnedMeshRenderer smr = r as SkinnedMeshRenderer;
-			if (smr)
-				return smr.sharedMesh;
-			MeshFilter mf = r.GetComponent<MeshFilter>();
-			return mf ? mf.sharedMesh : null;
+			string name = BakeShapeName;
+			int underscoreIdx = name.LastIndexOf('_');
+			if (underscoreIdx >= 0 && int.TryParse(name.Substring(underscoreIdx + 1), out int n))
+			{
+				name = name.Substring(0, underscoreIdx + 1) + (n + 1).ToString();
+			}
+			else
+			{
+				name = name + "_2";
+			}
+			BakeShapeName = name;
+			_bakeNameInput = name;
 		}
 
 		public void Cleanup()
 		{
-			if (FaceSelect)
-			{
-				UnityEngine.Object.Destroy(FaceSelect.gameObject);
-				FaceSelect = null;
-			}
 			if (_bgTex)
 			{
 				UnityEngine.Object.Destroy(_bgTex);
@@ -542,11 +606,76 @@ namespace KKShapeEditor
 		private void EnsureWindowStyle()
 		{
 			if (_windowStyle == null)
-				_windowStyle = new GUIStyle(GUI.skin.window);
+			{
+				Texture2D bg = EnsureBackgroundTex();
+				_windowStyle = new GUIStyle(GUI.skin.window)
+				{
+					normal =
+					{
+						background = bg
+					},
+					onNormal =
+					{
+						background = bg
+					}
+				};
+			}
 
-			Texture2D bg = EnsureBackgroundTex();
-			_windowStyle.normal.background = bg;
-			_windowStyle.onNormal.background = bg;
+			if (_labelTextRightStyle == null)
+			{
+				_labelTextRightStyle = new GUIStyle(GUI.skin.label)
+				{
+					alignment = TextAnchor.MiddleRight
+				};
+			}
+			if (_labelTextCenterStyle == null)
+			{
+				RectOffset p = GUI.skin.label.padding;
+				RectOffset m = GUI.skin.label.margin;
+				_labelTextCenterStyle = new GUIStyle(GUI.skin.label)
+				{
+					alignment = TextAnchor.MiddleCenter,
+					padding = new RectOffset(p.left,0,p.top,p.bottom),
+					margin = new RectOffset(m.left+5,0,m.top,m.bottom),
+				};
+			}
+
+			if (_smallButtonStyle == null)
+			{
+				RectOffset p = GUI.skin.button.padding;
+				_smallButtonStyle = new GUIStyle(GUI.skin.button)
+				{
+					alignment = TextAnchor.MiddleCenter,
+					padding = new RectOffset(left: 1, top: p.top, right: 1, bottom: p.bottom),
+				};
+			}
+			
+			if (_layerButtonStyle == null)
+			{
+				_layerButtonStyle = new GUIStyle(GUI.skin.button)
+				{
+					alignment = TextAnchor.MiddleLeft,
+					active =
+					{
+						textColor = Color.cyan
+					},
+					hover = 
+					{
+						textColor = Color.cyan
+					}
+				};
+			}
+			
+			if (_layerSliderStyle == null)
+			{
+				RectOffset p = GUI.skin.horizontalSlider.padding;
+				RectOffset m = GUI.skin.horizontalSlider.margin;
+				_layerSliderStyle = new GUIStyle(GUI.skin.horizontalSlider)
+				{
+					padding = new RectOffset(p.left, p.right, p.top, p.bottom),
+					margin = new RectOffset(m.left, m.right, m.top+5, m.bottom),
+				};
+			}
 		}
 
 		private Texture2D EnsureBackgroundTex()
@@ -560,37 +689,65 @@ namespace KKShapeEditor
 			return _bgTex;
 		}
 
+		private readonly List<KeyboardShortcut> _shortcutsUsed = new List<KeyboardShortcut>();
+		private bool Hotkey(ConfigEntry<KeyboardShortcut> shortcut)
+		{
+			return Hotkey(shortcut.Value);
+		}
+		private bool Hotkey(KeyboardShortcut shortcut)
+		{
+			if (shortcut.MainKey == KeyCode.None) return false;
+			bool down = shortcut.IsDown();
+			if (down) HotkeyUsed = true;
+
+			// remember if hotkey was already used this press (else holding the key will spam it, which is bad for the cycle hotkeys)
+			var hotkeyUsage = false;
+			if (InputHelper.LastReleasedKeyCode == shortcut.MainKey)
+			{
+				_shortcutsUsed.Remove(shortcut);
+			}
+			if (down && !_shortcutsUsed.Contains(shortcut))
+			{
+				hotkeyUsage = true;
+				_shortcutsUsed.Add(shortcut);
+				//BSE.Logger.LogDebug($"Hokey press registered: {shortcut.ToString()}");
+			}
+			
+			return hotkeyUsage;
+		}
+
 		private readonly int _windowId;
 		private Rect _windowRect;
 		private GUIStyle _windowStyle;
 		private Texture2D _bgTex;
 		private bool _showHelp;
+		private bool _expandRendererPanel;
 		private Rect _helpWindowRect;
 		private Vector2 _helpScroll;
 		private GUIStyle _helpLabelStyle;
-		private int _tabIndex;
+		private GUIStyle _labelTextCenterStyle;
+		private GUIStyle _labelTextRightStyle;
+		private GUIStyle _layerSliderStyle;
+		private GUIStyle _layerButtonStyle;
+		private GUIStyle _smallButtonStyle;
 		private Vector2 _layerScroll;
 		private Vector2 _rendererScroll;
 		private string _rendererFilter = "";
 		private int _renamingLayerIndex = -1;
 		private string _renamingText = "";
+		private string _bakeNameInput = "BSE_Shape";
+		internal bool HotkeyUsed;
 
 		public bool DeferEnterEditMode;
 		public bool DeferExitEditMode;
-		public bool DeferSubdivide;
-		public bool DeferRestore;
-		public bool DeferFaceSelectAll;
-		public bool DeferFaceSelectNone;
-		public bool DeferFaceSelectInvert;
 		public bool DeferLayerAdd;
+		public bool DeferRefreshRenderers;
+		public bool DeferUpdateWireColors;
 		public int DeferLayerRemove = -1;
-		public bool DeferSubdivideLayerWarningConfirm;
 		public int DeferLayerMoveUp = -1;
 		public int DeferLayerMoveDown = -1;
-		public bool DeferRemapWeights;
-		public bool DeferRestoreWeights;
-		public bool DeferExport;
-		public bool DeferImport;
+		public bool DeferBake;
+		public string BakeShapeName = "BSE_Shape";
 
 		private int _weightSliderLayer = -1;
 		private float _weightSliderBefore;
@@ -599,13 +756,9 @@ namespace KKShapeEditor
 		public float WeightUndoAfter;
 
 		public List<Renderer> Renderers = new List<Renderer>();
-		public int SelectedRendererIndex;
+		public int SelectedRendererIndex = -1;
 		public DeformData ActiveDeformData;
-		public FaceSelectOverlay FaceSelect;
 		public int VertexCount;
-		public bool ShowSubdivideLayerWarning;
-		public bool BodyMeshReadable;
-		public bool IsOnCharacter;
 
 		public enum OpMode
 		{

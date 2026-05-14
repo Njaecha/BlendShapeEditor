@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace KKShapeEditor
+namespace BlendShapeEditor
 {
 	public interface IDeformTool
 	{

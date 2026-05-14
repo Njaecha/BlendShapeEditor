@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace KKShapeEditor
+namespace BlendShapeEditor
 {
 	public class SelectionTool
 	{
-		public float Radius { get; set; } = ShapeEditorPlugin.DefaultBrushRadius != null ? ShapeEditorPlugin.DefaultBrushRadius.Value : 0.05f;
-		public float Strength { get; set; } = ShapeEditorPlugin.DefaultBrushStrength != null ? ShapeEditorPlugin.DefaultBrushStrength.Value : 0.5f;
+		public float Radius { get; set; } = BlendShapeEditorPlugin.DefaultBrushRadius != null ? BlendShapeEditorPlugin.DefaultBrushRadius.Value : 0.05f;
+		public float Strength { get; set; } = BlendShapeEditorPlugin.DefaultBrushStrength != null ? BlendShapeEditorPlugin.DefaultBrushStrength.Value : 0.5f;
 		public FalloffMode Falloff { get; set; } = FalloffMode.Smooth;
 		public SelectionToolMode ToolMode { get; set; }
 		public float SharpExponent { get; set; } = 3f;
@@ -237,7 +237,7 @@ namespace KKShapeEditor
 			};
 		}
 
-		public void SelectBox(Camera cam, Rect screenRect, bool additive)
+		public void SelectBox(Camera cam, Rect screenRect, bool additive, bool[] vertexVisible = null)
 		{
 			if (!_tempCollider)
 				return;
@@ -250,8 +250,10 @@ namespace KKShapeEditor
 				_selectedVertices.Clear();
 
 			Matrix4x4 l2w = _tempCollider.transform.localToWorldMatrix;
+			bool useMask = vertexVisible != null && vertexVisible.Length == verts.Length;
 			for (int i = 0; i < verts.Length; i++)
 			{
+				if (useMask && !vertexVisible[i]) continue;
 				Vector3 worldPos = l2w.MultiplyPoint3x4(verts[i]);
 				Vector3 screenPos = cam.WorldToScreenPoint(worldPos);
 				if (screenPos.z > 0f && screenRect.Contains(new Vector2(screenPos.x, screenPos.y)))
@@ -259,7 +261,7 @@ namespace KKShapeEditor
 			}
 		}
 
-		public void DeselectBox(Camera cam, Rect screenRect)
+		public void DeselectBox(Camera cam, Rect screenRect, bool[] vertexVisible = null)
 		{
 			if (!_tempCollider || _selectedVertices.Count == 0)
 				return;
@@ -269,10 +271,12 @@ namespace KKShapeEditor
 				return;
 
 			Matrix4x4 l2w = _tempCollider.transform.localToWorldMatrix;
+			bool useMask = vertexVisible != null && vertexVisible.Length == verts.Length;
 			for (int i = 0; i < verts.Length; i++)
 			{
 				if (_selectedVertices.Contains(i))
 				{
+					if (useMask && !vertexVisible[i]) continue;
 					Vector3 worldPos = l2w.MultiplyPoint3x4(verts[i]);
 					Vector3 screenPos = cam.WorldToScreenPoint(worldPos);
 					if (screenPos.z > 0f && screenRect.Contains(new Vector2(screenPos.x, screenPos.y)))

@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace KKShapeEditor
+namespace BlendShapeEditor
 {
 	public class UndoStack
 	{
