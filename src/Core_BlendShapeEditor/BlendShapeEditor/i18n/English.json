@@ -45,14 +45,14 @@
   "ObjectSpaceTooltipFmt": "Gizmo in Object-Space [{0}]",
   "NormalSpaceTooltipFmt": "Gizmo in Normal-Space [{0}]",
 
-  "GizmoSizeFactorFmt": "Gizmo \"Size\": {\"0\":F3}",
+  "GizmoSizeFactorFmt": "Gizmo \"Size\": {0:F3}",
 
   "SoftSelection": "Soft Selection",
   "SoftModeVolume": "Volume",
   "SoftModeSurface": "Surface",
   "SoftModeVolumeTooltipFmt": "Volume based selection [{0}]",
   "SoftModeSurfaceTooltipFmt": "Surface based selection [{0}]",
-  "SoftSelectionRadiusFmt": "Soft Selection \"Radius\": {\"0\":F3}",
+  "SoftSelectionRadiusFmt": "Soft Selection \"Radius\": {0:F3}",
   "CullBackVertices": "Cull back-facing verts",
   "CullBackWireframe": "Cull back-facing edges",
 
@@ -60,7 +60,7 @@
   "SymmetryAxis": "Axis",
   "SetCenter": "Set Center",
   "ClearCenter": "Clear",
-  "MirrorCenterFmt": "\"Center\": {\"0\":F3}",
+  "MirrorCenterFmt": "\"Center\": {0:F3}",
 
   "Layers": "Layers",
   "AddLayerFmt": "Add Layer [{0}]",

@@ -10,8 +10,6 @@ namespace BlendShapeEditor
 {
     public static class i18n
     {
-        private static Language _current = Language.English;
-
         #region Fields
         
         // Window chrome
@@ -184,6 +182,7 @@ namespace BlendShapeEditor
         public enum Language
         {
             English,
+            Spanish
             // more langs?
         }
     }

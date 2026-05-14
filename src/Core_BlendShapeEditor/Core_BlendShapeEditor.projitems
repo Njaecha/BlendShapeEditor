@@ -53,4 +53,7 @@
   <ItemGroup>
     <EmbeddedResource Include="$(MSBuildThisFileDirectory)BlendShapeEditor\i18n\English.json" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)BlendShapeEditor\i18n\Spanish.json" />
+  </ItemGroup>
 </Project>
