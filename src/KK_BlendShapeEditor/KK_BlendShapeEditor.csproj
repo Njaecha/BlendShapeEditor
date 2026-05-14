@@ -71,6 +71,9 @@
       <Reference Include="KK_Fix_MakerOptimizations">
         <HintPath>..\..\AdditionalDependencies\KK_Fix_MakerOptimizations-publicized.dll</HintPath>
       </Reference>
+      <Reference Include="KK_MaterialEditor">
+        <HintPath>..\..\AdditionalDependencies\KK_MaterialEditor-publicized.dll</HintPath>
+      </Reference>
       <Reference Include="System" />
       <Reference Include="System.Core" />
       <Reference Include="TextMeshPro-1.0.55.56.0b12, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">

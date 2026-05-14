@@ -6,26 +6,34 @@ using KKAPI.Studio;
 using Studio;
 using UnityEngine;
 using Object = UnityEngine.Object;
+using BSE = BlendShapeEditor.BlendShapeEditorPlugin;
 
 namespace BlendShapeEditor
 {
 	[DefaultExecutionOrder(32001)]
 	public class ShapePaintOverlay : MonoBehaviour
 	{
-		static ShapePaintOverlay()
+		public static void RebuildGradients()
 		{
-			WeightGradient = new Gradient();
-			WeightGradient.SetKeys(new GradientColorKey[]
-			{
-				new GradientColorKey(new Color(0f, 0f, 1f), 0f),
-				new GradientColorKey(new Color(0f, 1f, 0f), 0.33f),
-				new GradientColorKey(new Color(1f, 1f, 0f), 0.66f),
-				new GradientColorKey(new Color(1f, 0f, 0f), 1f)
-			}, new GradientAlphaKey[]
+			GradientAlphaKey[] alphaKeys = new[]
 			{
 				new GradientAlphaKey(1f, 0f),
 				new GradientAlphaKey(1f, 1f)
-			});
+			};
+			WeightGradient.SetKeys(new[]
+			{
+				new GradientColorKey(BSE.WeightGradientStop0.Value, 0f),
+				new GradientColorKey(BSE.WeightGradientStop1.Value, 0.33f),
+				new GradientColorKey(BSE.WeightGradientStop2.Value, 0.66f),
+				new GradientColorKey(BSE.WeightGradientStop3.Value, 1f)
+			}, alphaKeys);
+			MirrorWeightGradient.SetKeys(new[]
+			{
+				new GradientColorKey(BSE.WeightMirrorGradientStop0.Value, 0f),
+				new GradientColorKey(BSE.WeightMirrorGradientStop1.Value, 0.33f),
+				new GradientColorKey(BSE.WeightMirrorGradientStop2.Value, 0.66f),
+				new GradientColorKey(BSE.WeightMirrorGradientStop3.Value, 1f)
+			}, alphaKeys);
 		}
 
 		public void SetTarget(Renderer renderer)
@@ -59,7 +67,7 @@ namespace BlendShapeEditor
 
 		private void Update()
 		{
-			if (BlendShapeEditorPlugin.StudioToggleKey.Value.IsDown())
+			if (BlendShapeEditorPlugin.KeyStudioToggle.Value.IsDown())
 			{
 				Window?.Toggle();
 				if (Window != null && Window.Visible)
@@ -75,13 +83,24 @@ namespace BlendShapeEditor
 				}
 			}
 			ProcessDeferredActions();
-			Input?.PollMousePosition();
+			
 		}
 
 		private void ProcessDeferredActions()
 		{
 			if (Window == null)
 				return;
+			if (Window.DeferRefreshRenderers)
+			{
+				Window.DeferRefreshRenderers = false;
+				OnRefreshRenderers?.Invoke();
+			}
+
+			if (Window.DeferUpdateWireColors)
+			{
+				Window.DeferUpdateWireColors = false;
+				_wireColorsDirty = true;
+			}
 			if (Window.DeferEnterEditMode)
 			{
 				Window.DeferEnterEditMode = false;
@@ -138,25 +157,25 @@ namespace BlendShapeEditor
 					StudioUndoBridge.PushDummy(this);
 				}
 			}
-			if (Window.DeferSetSymmetryCenter)
+			if (Window.DeferSetMirrorCenter)
 			{
-				Window.DeferSetSymmetryCenter = false;
+				Window.DeferSetMirrorCenter = false;
 				if (_gizmo != null && _gizmo.HasTarget)
 				{
 					Vector3 centroidLocal = _gizmo.CentroidLocal;
-					int axisIdx = Window.SymmetryAxisIndex;
+					int axisIdx = Window.MirrorAxisIndex;
 					float center = axisIdx == 0 ? centroidLocal.x : (axisIdx == 1 ? centroidLocal.y : centroidLocal.z);
-					Window.SymmetryCenter = center;
-					Window.SymmetryCenterSet = true;
+					Window.MirrorCenter = center;
+					Window.MirrorCenterSet = true;
 					_symmetryCenter = center;
 					_symmetryCenterSet = true;
 				}
 			}
-			if (Window.DeferClearSymmetryCenter)
+			if (Window.DeferClearMirrorCenter)
 			{
-				Window.DeferClearSymmetryCenter = false;
-				Window.SymmetryCenter = 0f;
-				Window.SymmetryCenterSet = false;
+				Window.DeferClearMirrorCenter = false;
+				Window.MirrorCenter = 0f;
+				Window.MirrorCenterSet = false;
 				_symmetryCenter = 0f;
 				_symmetryCenterSet = false;
 			}
@@ -270,6 +289,10 @@ namespace BlendShapeEditor
 			_lineIndexBuffer = null;
 			_visibleLineIndices = null;
 			_prevVisibleCount = -1;
+			_culledVisibleCount = 0;
+			_hoverVertexIndex = -1;
+			_vertsUploadDirty = true;
+			_prevL2W = Matrix4x4.zero;
 			if (_wireLineMesh)
 			{
 				Destroy(_wireLineMesh);
@@ -452,6 +475,7 @@ namespace BlendShapeEditor
 				_gizmo.SoftSelectionRadius = Window.GizmoSoftRadius;
 				_gizmo.SoftFalloff = Window.GizmoFalloff;
 				_gizmo.SoftMode = (SoftSelectMode)Window.SoftSelectModeIndex;
+				_gizmo.SizeFactor = Window.GizmoSizeFactor;
 				if (_gizmo.HasTarget && (prevSoftEnabled != _gizmo.SoftSelectionEnabled || !Mathf.Approximately(prevSoftRadius, _gizmo.SoftSelectionRadius) || prevSoftMode != _gizmo.SoftMode))
 				{
 					_softWeightsDirtyTime = Time.unscaledTime;
@@ -472,16 +496,16 @@ namespace BlendShapeEditor
 				}
 				// UpdateHover runs every frame for handle highlight rendering
 				Transform targetTransform = SelectionTool.TargetTransform;
-				_gizmo.UpdateHover(Input.MousePosition, main, targetTransform);
+				_gizmo.UpdateHover(InputHelper.MousePosition, main, targetTransform);
 			}
 			bool prevSymEnabled = _symmetryEnabled;
 			int prevSymAxis = _symmetryAxis;
 			float prevSymCenter = _symmetryCenter;
 			bool prevSymCenterSet = _symmetryCenterSet;
-			_symmetryEnabled = Window.SymmetryEnabled;
-			_symmetryAxis = Window.SymmetryAxisIndex;
-			_symmetryCenter = Window.SymmetryCenter;
-			_symmetryCenterSet = Window.SymmetryCenterSet;
+			_symmetryEnabled = Window.MirrorEnabled;
+			_symmetryAxis = Window.MirrorAxisIndex;
+			_symmetryCenter = Window.MirrorCenter;
+			_symmetryCenterSet = Window.MirrorCenterSet;
 			if (_gizmo != null)
 			{
 				_gizmo.SymmetryEnabled = _symmetryEnabled;
@@ -496,14 +520,109 @@ namespace BlendShapeEditor
 						UpdateGizmoTarget(cachedVertices3);
 				}
 			}
+			
+			// Backface cull edges + build per-vertex visibility mask (moved from OnRenderObject to overlap with other CPU work)
+			if (_edges != null && _wireVerts != null && _lineIndexBuffer != null
+				&& _wireTris != null && _triFrontFacing != null && _vertexVisible != null
+				&& _triFrontFacing.Length == _wireTris.Length / 3
+				&& _vertexVisible.Length == _wireVerts.Length)
+			{
+				Vector3 camPos = main.transform.position;
+
+				// Pass 1: per-triangle facing + vertex visibility mask
+				int triCount = _wireTris.Length / 3;
+				Array.Clear(_vertexVisible, 0, _vertexVisible.Length);
+				for (int t = 0; t < triCount; t++)
+				{
+					int b = t * 3;
+					int i0 = _wireTris[b];
+					int i1 = _wireTris[b + 1];
+					int i2 = _wireTris[b + 2];
+					Vector3 v0 = _wireVerts[i0];
+					Vector3 v1 = _wireVerts[i1];
+					Vector3 v2 = _wireVerts[i2];
+					bool front = Vector3.Dot(Vector3.Cross(v1 - v0, v2 - v0), v0 - camPos) <= 0f;
+					_triFrontFacing[t] = front;
+					if (front)
+					{
+						_vertexVisible[i0] = true;
+						_vertexVisible[i1] = true;
+						_vertexVisible[i2] = true;
+					}
+				}
+
+				// Pass 2: edge cull using the cached per-triangle facing.
+				// Skip culling entirely when the user has turned wireframe culling off.
+				int edgeCount = _edges.Length;
+				bool cullWire = Window == null || Window.CullBackWireframe;
+				var writeIdx = 0;
+				if (cullWire)
+				{
+					for (var i = 0; i < edgeCount; i++)
+					{
+						int tri0 = _edges[i].tri0;
+						int tri1 = _edges[i].tri1;
+						bool front0 = _triFrontFacing[tri0];
+						bool front1 = tri1 >= 0 && _triFrontFacing[tri1];
+						if (!front0 && !front1) continue;
+						_lineIndexBuffer[writeIdx++] = _edges[i].v0;
+						_lineIndexBuffer[writeIdx++] = _edges[i].v1;
+					}
+				}
+				else
+				{
+					for (var i = 0; i < edgeCount; i++)
+					{
+						_lineIndexBuffer[writeIdx++] = _edges[i].v0;
+						_lineIndexBuffer[writeIdx++] = _edges[i].v1;
+					}
+				}
+				_culledVisibleCount = writeIdx;
+			}
+			
 			// Update raycast hit for cursor rendering and brush entry condition
 			if (ShapeEditorWindow.IsMouseOverUI)
 			{
 				_hasHit = false;
+				_hoverVertexIndex = -1;
 				return;
 			}
-			Ray ray = main.ScreenPointToRay(Input.MousePosition);
+			Ray ray = main.ScreenPointToRay(InputHelper.MousePosition);
 			_hasHit = SelectionTool.Raycast(ray, out _lastHitPoint, out _lastHitNormal);
+
+			
+
+			// Find closest visible vertex to mouse cursor for hover highlight
+			if (!Input.IsCamControlNow) UpdateHoverVertex(main, InputHelper.MousePosition);
+		}
+
+		private void UpdateHoverVertex(Camera cam, Vector2 screenMousePos)
+		{
+			if (_wireVerts == null || _wireVerts.Length == 0)
+			{
+				_hoverVertexIndex = -1;
+				return;
+			}
+			// Both Input.MousePosition and WorldToScreenPoint use screen space (Y=0 at bottom) — compare directly
+			float bestDistSq = DotPixelSize * DotPixelSize * 4f; // search radius = 2× dot size in pixels
+			int bestIdx = -1;
+			bool restrictToVisible = Window != null && Window.CullBackVertices
+				&& _vertexVisible != null && _vertexVisible.Length == _wireVerts.Length;
+			for (var i = 0; i < _wireVerts.Length; i++)
+			{
+				if (restrictToVisible && !_vertexVisible[i]) continue;
+				Vector3 screen = cam.WorldToScreenPoint(_wireVerts[i]);
+				if (screen.z <= 0f) continue;
+				float dx = screen.x - screenMousePos.x;
+				float dy = screen.y - screenMousePos.y;
+				float distSq = dx * dx + dy * dy;
+				if (distSq < bestDistSq)
+				{
+					bestDistSq = distSq;
+					bestIdx = i;
+				}
+			}
+			_hoverVertexIndex = bestIdx;
 		}
 
 		private void ProcessBrushEvent(Event e, Camera cam, DeformLayer activeLayer)
@@ -511,6 +630,26 @@ namespace BlendShapeEditor
 			if (activeLayer == null || Input.IsCamControlNow)
 				return;
 
+			// change brush with scroll wheel
+			if (_hasHit || _isBrushing)
+			{
+				float delta = InputHelper.MouseScrollDelta.y;
+				if (e.alt)
+				{
+					float v = delta * 0.001f * BSE.BrushStrengthScrollMod.Value;
+					if (Window.BrushStrength + v < 0.01f) Window.BrushStrength = 0.01f;
+					else if (Window.BrushStrength + v > 1f) Window.BrushStrength = 1f;
+					else Window.BrushStrength += v;
+				}
+				else
+				{
+					float v = delta * 0.001f * BSE.BrushRadiusScrollMod.Value;
+					if (Window.BrushRadius + v < 0.001f) Window.BrushRadius = 0.01f;
+					else if (Window.BrushRadius + v > 0.5f) Window.BrushRadius = 1f;
+					else Window.BrushRadius += v;
+				}
+			}
+			
 			// user left-clicked on model
 			if (e.type == EventType.MouseDown && e.button == 0 && _hasHit)
 			{
@@ -539,6 +678,9 @@ namespace BlendShapeEditor
 					_moveGrabVertices = null;
 					_moveGrabResult = null;
 					_moveGrabMirrorResult = null;
+					_brushAffectedVertices = null;
+					_brushMirrorAffectedVertices = null;
+					_wireColorsDirty = true;
 					CommitBrushUndoEntry(activeLayer);
 					Input?.SetCameraEnabled(true);
 					e.Use();
@@ -561,7 +703,7 @@ namespace BlendShapeEditor
 				// Move tool grabs vertices once on the first frame, then keeps moving them even when off-mesh
 				if (_moveGrabVertices == null)
 				{
-					Ray ray = cam.ScreenPointToRay(Input.MousePosition);
+					Ray ray = cam.ScreenPointToRay(InputHelper.MousePosition);
 					BrushResult initialResult = SelectionTool.BrushSelect(ray);
 					if (initialResult == null || initialResult.AffectedVertices.Count == 0)
 						return;
@@ -590,7 +732,7 @@ namespace BlendShapeEditor
 			else
 			{
 				// Inflate/Smooth: need a live raycast hit each frame
-				Ray ray = cam.ScreenPointToRay(Input.MousePosition);
+				Ray ray = cam.ScreenPointToRay(InputHelper.MousePosition);
 				brushResult = SelectionTool.BrushSelect(ray);
 				if (brushResult == null || brushResult.AffectedVertices.Count == 0)
 					return;
@@ -603,7 +745,12 @@ namespace BlendShapeEditor
 				_brushBeforeSnapshot[pair.Key] = deltas[pair.Key];
 			}
 			activeTool.Apply(activeLayer, brushResult, cachedVertices, cachedNormals, cam);
-			if (!_symmetryEnabled || !_targetRenderer) return;
+			_brushAffectedVertices = brushResult.AffectedVertices;
+			if (!_symmetryEnabled || !_targetRenderer)
+			{
+				_brushMirrorAffectedVertices = null;
+				return;
+			}
 			{
 				BrushResult mirrorResult;
 				if (activeTool is MoveTool && _moveGrabMirrorResult != null)
@@ -649,8 +796,14 @@ namespace BlendShapeEditor
 					activeTool.Apply(activeLayer, mirrorResult, cachedVertices, cachedNormals, cam);
 					if (mirrorMoveTool != null)
 						mirrorMoveTool.MirrorAxis = -1;
+					_brushMirrorAffectedVertices = mirrorResult.AffectedVertices;
+				}
+				else
+				{
+					_brushMirrorAffectedVertices = null;
 				}
 			}
+			_wireColorsDirty = true;
 		}
 
 		private void CommitBrushUndoEntry(DeformLayer layer)
@@ -744,6 +897,26 @@ namespace BlendShapeEditor
 			Transform targetTransform = SelectionTool.TargetTransform;
 			Vector3[] cachedVertices = SelectionTool.CachedVertices;
 
+			// scroll events
+			if (_gizmo.HasTarget)
+			{
+				float delta = InputHelper.MouseScrollDelta.y;
+				if (e.alt)
+				{
+					float v = delta * 0.001f * BSE.GizmoSizeScrollMod.Value;
+					if (Window.GizmoSizeFactor + v < 0.01f) Window.GizmoSizeFactor = 0.01f;
+					else if (Window.GizmoSizeFactor + v > 0.15f) Window.GizmoSizeFactor = 0.15f;
+					else Window.GizmoSizeFactor += v;
+				}
+				else if (_gizmo.SoftSelectionEnabled)
+				{
+					float v = delta * 0.001f * BSE.GizmoSoftSelectionScrollMod.Value;
+					if (Window.GizmoSoftRadius + v < 0.001f)  Window.GizmoSoftRadius = 0.001f;
+					else if (Window.GizmoSoftRadius + v > 0.5f) Window.GizmoSoftRadius = 0.5f;
+					Window.GizmoSoftRadius += v;
+				}
+			}
+			
 			// Gizmo drag (LMB on handle) — skipped when Alt is held (Alt+LMB = box selection)
 			if (e.type == EventType.MouseDown && e.button == 0 && !e.alt && _gizmo.HoveredAxis != GizmoEnums.None)
 			{
@@ -795,12 +968,22 @@ namespace BlendShapeEditor
 			}
 
 			// LMB click on model (no Alt, no gizmo handle): single-vertex snap
-			if (e.type == EventType.MouseUp && e.button == 0 && !_gizmo.IsDragging && !e.alt && _hasHit)
+			if (_hoverVertexIndex >= 0)
 			{
-				TrySelectVertexAtHit(e.modifiers, cachedVertices);
-				UpdateGizmoTarget(cachedVertices);
-				e.Use();
+				if (e.type == EventType.MouseDown && e.button == 0)
+				{
+					Input?.SetCameraEnabled(false);
+				}
+				
+				if (e.type == EventType.MouseUp && e.button == 0 && !_gizmo.IsDragging && !e.alt)
+				{
+					TrySelectVertexAtHit(e.modifiers, cachedVertices);
+					UpdateGizmoTarget(cachedVertices);
+					e.Use();
+					Input?.SetCameraEnabled(true);
+				}
 			}
+			
 		}
 
 		private void CommitBoxSelection(EventModifiers mods, Camera cam, Vector3[] cachedVertices)
@@ -824,10 +1007,11 @@ namespace BlendShapeEditor
 				float screenYMin = Screen.height - yMax;
 				float screenYMax = Screen.height - yMin;
 				Rect screenRect = new Rect(xMin, screenYMin, xMax - xMin, screenYMax - screenYMin);
+				bool[] visMask = (Window != null && Window.CullBackVertices) ? _vertexVisible : null;
 				if ((mods & EventModifiers.Control) != 0)
-					SelectionTool.DeselectBox(cam, screenRect);
+					SelectionTool.DeselectBox(cam, screenRect, visMask);
 				else
-					SelectionTool.SelectBox(cam, screenRect, (mods & EventModifiers.Shift) != 0);
+					SelectionTool.SelectBox(cam, screenRect, (mods & EventModifiers.Shift) != 0, visMask);
 			}
 
 			UpdateGizmoTarget(cachedVertices);
@@ -842,22 +1026,7 @@ namespace BlendShapeEditor
 					SelectionTool.ClearSelection();
 				return;
 			}
-			float snapRadius = BlendShapeEditorPlugin.VertexSnapRadius.Value;
-			int bestIdx = -1;
-			float bestDist = snapRadius * snapRadius;
-			if (cachedVertices != null && SelectionTool.TargetTransform)
-			{
-				Transform xform = SelectionTool.TargetTransform;
-				for (int i = 0; i < cachedVertices.Length; i++)
-				{
-					float d = (xform.TransformPoint(cachedVertices[i]) - _lastHitPoint).sqrMagnitude;
-					if (d < bestDist)
-					{
-						bestDist = d;
-						bestIdx = i;
-					}
-				}
-			}
+			int bestIdx = _hoverVertexIndex;
 			if (bestIdx >= 0)
 			{
 				if ((mods & EventModifiers.Shift) != 0)
@@ -941,7 +1110,7 @@ namespace BlendShapeEditor
 
 		private void OnRenderObject()
 		{
-			if (Camera.current != Camera.main)
+			if (Camera.current != _camera)
 				return;
 			if (Window == null)
 				return;
@@ -952,21 +1121,18 @@ namespace BlendShapeEditor
 			if (!Window.IsEditMode)
 				return;
 			bool hasWire = _wireVerts != null && _wireTris != null;
+			if (hasWire) DrawWireframe();
 			if (!hasWire && !_hasHit)
 				return;
-			if (hasWire)
-				DrawWireframe();
 			_cursorMaterial.SetPass(0);
 			GL.PushMatrix();
 			GL.MultMatrix(Matrix4x4.identity);
+			if (hasWire)
+				DrawVertexDots(_camera);
 			if (Window.OperationMode == ShapeEditorWindow.OpMode.Brush)
 			{
 				if (_hasHit)
 					DrawBrushCircle(_lastHitPoint, _lastHitNormal, Window.BrushRadius);
-			}
-			else if (hasWire && SelectionTool != null && SelectionTool.SelectedVertices.Count > 0)
-			{
-				DrawSelectedVertices();
 			}
 			if (_isBoxSelecting)
 				DrawBoxSelectRect();
@@ -988,7 +1154,23 @@ namespace BlendShapeEditor
 			tangent.Normalize();
 			Vector3 bitangent = Vector3.Cross(normal, tangent);
 			GL.Begin(1);
-			GL.Color(new Color(1f, 1f, 0f, 0.9f));
+			Color col;
+			switch (Window.SelectedBrushTool)
+			{
+				case ShapeEditorWindow.BrushToolType.Move:
+					col = BSE.BrushColorMove.Value;
+					break;
+				case ShapeEditorWindow.BrushToolType.Smooth:
+					col = BSE.BrushColorSmooth.Value;
+					break;
+				case ShapeEditorWindow.BrushToolType.Inflate:
+					col = BSE.BrushColorInflate.Value;
+					break;
+				default:
+					col = new Color(1, 1, 0, 0.9f);
+					break;
+			}
+			GL.Color(col);
 			for (var i = 0; i < 32; i++)
 			{
 				float a0 = (float)i / 32f * Mathf.PI * 2f;
@@ -1003,7 +1185,7 @@ namespace BlendShapeEditor
 			if (crossSize < 0.001f)
 				crossSize = 0.001f;
 			GL.Begin(1);
-			GL.Color(new Color(1f, 1f, 0f, 0.9f));
+			GL.Color(col);
 			GL.Vertex(center - tangent * crossSize);
 			GL.Vertex(center + tangent * crossSize);
 			GL.Vertex(center - bitangent * crossSize);
@@ -1011,17 +1193,62 @@ namespace BlendShapeEditor
 			GL.End();
 		}
 
-		private void DrawSelectedVertices()
+		private void DrawVertexDots(Camera cam)
 		{
-			var size = 0.002f;
-			GL.Begin(1);
-			GL.Color(new Color(0f, 1f, 0.5f, 0.9f));
-			foreach (Vector3 v in from idx in SelectionTool.SelectedVertices where idx >= 0 && idx < _wireVerts.Length select _wireVerts[idx])
+			if (_wireVerts == null || cam == null)
+				return;
+			// Compute billboard offset vectors in world space (camera-right / camera-up)
+			// Convert dot pixel size to a world-space half-extent
+			Vector3 camPos = cam.transform.position;
+			Transform ct = cam.transform;
+			// Pick a reference depth to convert pixels → world units. Use distance to mesh centroid estimate.
+			float refDist = _wireVerts.Length > 0 ? Vector3.Distance(camPos, _wireVerts[0]) : 5f;
+			// One pixel in world units at refDist for a perspective camera
+			float pixelWorldSize = refDist * Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad) * 2f / Screen.height;
+			float half = DotPixelSize * pixelWorldSize * 0.5f;
+			Vector3 right = ct.right * half;
+			Vector3 up = ct.up * half;
+			bool inGizmoMode = Window.OperationMode == ShapeEditorWindow.OpMode.Gizmo;
+			bool inBrushMode = Window.OperationMode == ShapeEditorWindow.OpMode.Brush;
+			HashSet<int> selectedVerts = inGizmoMode && SelectionTool != null ? SelectionTool.SelectedVertices : null;
+			bool useGizmoSoftGradient = inGizmoMode && _gizmo != null && _gizmo.SoftSelectionEnabled && _gizmo.HasTarget;
+			Dictionary<int, float> primarySoftWeights = useGizmoSoftGradient ? _gizmo.PrimarySoftWeights : null;
+			Dictionary<int, float> mirrorSoftWeights = useGizmoSoftGradient && _gizmo.HasMirrorTarget ? _gizmo.MirrorSoftWeights : null;
+			Dictionary<int, float> brushAffected = inBrushMode ? _brushAffectedVertices : null;
+			Dictionary<int, float> brushMirrorAffected = inBrushMode ? _brushMirrorAffectedVertices : null;
+			bool hideOccludedDots = Window != null && Window.CullBackVertices
+				&& _vertexVisible != null && _vertexVisible.Length == _wireVerts.Length;
+			GL.Begin(4); // triangles
+			for (var i = 0; i < _wireVerts.Length; i++)
 			{
-				GL.Vertex(v + Vector3.left * size);
-				GL.Vertex(v + Vector3.right * size);
-				GL.Vertex(v + Vector3.up * size);
-				GL.Vertex(v + Vector3.down * size);
+				if (hideOccludedDots && !_vertexVisible[i]
+					&& (selectedVerts == null || !selectedVerts.Contains(i))
+					&& i != _hoverVertexIndex)
+					continue;
+				Vector3 c = _wireVerts[i];
+				Color col;
+				if (i == _hoverVertexIndex)
+					col = BSE.VertexColorHover.Value;
+				else if (primarySoftWeights != null && primarySoftWeights.TryGetValue(i, out float gw))
+					col = WeightGradient.Evaluate(gw);
+				else if (mirrorSoftWeights != null && mirrorSoftWeights.TryGetValue(i, out float mgw))
+					col = MirrorWeightGradient.Evaluate(mgw);
+				else if (selectedVerts != null && selectedVerts.Contains(i))
+					col = BSE.VertexColorSelected.Value;
+				else if (brushAffected != null && brushAffected.TryGetValue(i, out float weight))
+					col = WeightGradient.Evaluate(weight);
+				else if (brushMirrorAffected != null && brushMirrorAffected.TryGetValue(i, out float mWeight))
+					col = MirrorWeightGradient.Evaluate(mWeight);
+				else
+					col = BSE.VertexColorDefault.Value;
+				GL.Color(col);
+				// Two triangles forming a quad facing the camera
+				Vector3 bl = c - right - up;
+				Vector3 br = c + right - up;
+				Vector3 tl = c - right + up;
+				Vector3 tr = c + right + up;
+				GL.Vertex(bl); GL.Vertex(br); GL.Vertex(tr);
+				GL.Vertex(bl); GL.Vertex(tr); GL.Vertex(tl);
 			}
 			GL.End();
 		}
@@ -1033,82 +1260,90 @@ namespace BlendShapeEditor
 			Camera main = _camera;
 			if (!main)
 				return;
-			Vector3 camPos = main.transform.position;
 			bool useSoftColors = _gizmo != null && _gizmo.SoftSelectionEnabled && _gizmo.HasTarget && Window.OperationMode == ShapeEditorWindow.OpMode.Gizmo;
-			if (_wireColorsDirty || useSoftColors != _prevUseSoftColors || _wireColors == null || _wireColors.Length != _wireVerts.Length)
+			bool useBrushColors = Window.OperationMode == ShapeEditorWindow.OpMode.Brush && (_brushAffectedVertices != null || _brushMirrorAffectedVertices != null);
+			bool inGizmoMode = Window.OperationMode == ShapeEditorWindow.OpMode.Gizmo;
+			HashSet<int> selectedVerts = inGizmoMode && SelectionTool != null ? SelectionTool.SelectedVertices : null;
+			HashSet<int> mirrorVerts = inGizmoMode && _symmetryEnabled && _gizmo != null && _gizmo.HasMirrorTarget ? _gizmo.MirrorIndices : null;
+			bool hasSelection = selectedVerts != null && selectedVerts.Count > 0;
+			bool hasMirror = mirrorVerts != null && mirrorVerts.Count > 0;
+			if (_wireColorsDirty || useSoftColors != _prevUseSoftColors || useBrushColors != _prevUseBrushColors || hasMirror != _prevHasMirror || _wireColors == null || _wireColors.Length != _wireVerts.Length)
 			{
-				RebuildWireColors(useSoftColors);
+				RebuildWireColors(useSoftColors, useBrushColors, hasSelection ? selectedVerts : null, hasMirror ? mirrorVerts : null);
 				_wireColorsDirty = false;
 				_prevUseSoftColors = useSoftColors;
+				_prevUseBrushColors = useBrushColors;
+				_prevHasMirror = hasMirror;
 			}
-			int edgeCount = _edges.Length;
-			var writeIdx = 0;
-			for (var i = 0; i < edgeCount; i++)
-			{
-				int tri0 = _edges[i].tri0;
-				int tri1 = _edges[i].tri1;
-				bool front0 = IsTriangleFrontFacing(tri0, camPos);
-				bool front1 = tri1 >= 0 && IsTriangleFrontFacing(tri1, camPos);
-				if (!front0 && !front1) continue;
-				_lineIndexBuffer[writeIdx++] = _edges[i].v0;
-				_lineIndexBuffer[writeIdx++] = _edges[i].v1;
-			}
-			_wireLineMesh.vertices = _wireVerts;
-			_wireLineMesh.colors32 = _wireColors;
+			// Cull results were computed in LateUpdate; use them directly
+			int writeIdx = _culledVisibleCount;
 			if (writeIdx != _prevVisibleCount)
 			{
 				_visibleLineIndices = new int[writeIdx];
 				_prevVisibleCount = writeIdx;
 			}
 			Array.Copy(_lineIndexBuffer, _visibleLineIndices, writeIdx);
+			// Only re-upload vertex/color data when something changed
+			if (_vertsUploadDirty)
+			{
+				_wireLineMesh.vertices = _wireVerts;
+				_vertsUploadDirty = false;
+			}
+			_wireLineMesh.colors32 = _wireColors;
 			_wireLineMesh.SetIndices(_visibleLineIndices, MeshTopology.Lines, 0);
 			_cursorMaterial.SetPass(0);
 			Graphics.DrawMeshNow(_wireLineMesh, Matrix4x4.identity);
 		}
 
-		private bool IsTriangleFrontFacing(int triIdx, Vector3 camPos)
-		{
-			int base3 = triIdx * 3;
-			if (base3 + 2 >= _wireTris.Length)
-				return false;
-			Vector3 v0 = _wireVerts[_wireTris[base3]];
-			Vector3 v1 = _wireVerts[_wireTris[base3 + 1]];
-			Vector3 v2 = _wireVerts[_wireTris[base3 + 2]];
-			return Vector3.Dot(Vector3.Cross(v1 - v0, v2 - v0), v0 - camPos) <= 0f;
-		}
-
-		private void RebuildWireColors(bool useSoftColors)
+		private void RebuildWireColors(bool useSoftColors, bool useBrushColors, HashSet<int> selectedVerts, HashSet<int> mirrorVerts)
 		{
 			int count = _wireVerts.Length;
 			if (_wireColors == null || _wireColors.Length != count)
 				_wireColors = new Color32[count];
+			Color32 defCol = BSE.WireColorDefault.Value;
 			if (useSoftColors)
 			{
-				Dictionary<int, float> softWeights = _gizmo.SoftWeights;
+				Dictionary<int, float> primary = _gizmo.PrimarySoftWeights;
+				Dictionary<int, float> mirror = _gizmo.HasMirrorTarget ? _gizmo.MirrorSoftWeights : null;
 				for (var i = 0; i < count; i++)
 				{
-					if (softWeights.TryGetValue(i, out float weight))
-					{
-						if (weight <= 0.5f)
-						{
-							var r = (byte)(weight * 2f * 255f);
-							_wireColors[i] = new Color32(r, 0, 0, byte.MaxValue);
-						}
-						else
-						{
-							var g = (byte)((weight - 0.5f) * 2f * 255f);
-							_wireColors[i] = new Color32(byte.MaxValue, g, 0, byte.MaxValue);
-						}
-					}
+					if (primary != null && primary.TryGetValue(i, out float w))
+						_wireColors[i] = WeightGradient.Evaluate(w);
+					else if (mirror != null && mirror.TryGetValue(i, out float mw))
+						_wireColors[i] = MirrorWeightGradient.Evaluate(mw);
 					else
-					{
-						_wireColors[i] = WireDefaultColor32;
-					}
+						_wireColors[i] = defCol;
 				}
 				return;
 			}
+			if (useBrushColors)
+			{
+				Dictionary<int, float> primary = _brushAffectedVertices;
+				Dictionary<int, float> mirror = _brushMirrorAffectedVertices;
+				for (var i = 0; i < count; i++)
+				{
+					if (primary != null && primary.TryGetValue(i, out float w))
+						_wireColors[i] = WeightGradient.Evaluate(w);
+					else if (mirror != null && mirror.TryGetValue(i, out float mw))
+						_wireColors[i] = MirrorWeightGradient.Evaluate(mw);
+					else
+						_wireColors[i] = defCol;
+				}
+				return;
+			}
+			bool hasSelection = selectedVerts != null && selectedVerts.Count > 0;
+			bool hasMirror = mirrorVerts != null && mirrorVerts.Count > 0;
+			Color32 selCol = BSE.WireColorSelected.Value;
+			Color32 mirCol = BSE.WireColorMirror.Value;
 			for (var j = 0; j < count; j++)
-				_wireColors[j] = WireDefaultColor32;
+			{
+				if (hasSelection && selectedVerts.Contains(j))
+					_wireColors[j] = selCol;
+				else if (hasMirror && mirrorVerts.Contains(j))
+					_wireColors[j] = mirCol;
+				else
+					_wireColors[j] = defCol;
+			}
 		}
 
 		private void DrawBoxSelectRect()
@@ -1288,17 +1523,41 @@ namespace BlendShapeEditor
 				_wireVerts = null;
 				_wireTris = null;
 				_edges = null;
+				_triFrontFacing = null;
+				_vertexVisible = null;
 				return;
 			}
-			Vector3[] vertices = mesh.vertices;
-			if (_wireVerts == null || _wireVerts.Length != vertices.Length)
-				_wireVerts = new Vector3[vertices.Length];
-			for (var i = 0; i < vertices.Length; i++)
-				_wireVerts[i] = l2w.MultiplyPoint3x4(vertices[i]);
 			int instanceID = mesh.GetInstanceID();
-			if (_wireTris != null && _wireMeshId == instanceID) return;
+			bool meshChanged = _wireTris == null || _wireMeshId != instanceID;
+			// Read vertices into pre-allocated list to avoid allocation from mesh.vertices property
+			mesh.GetVertices(_vertexReadback);
+			int vCount = _vertexReadback.Count;
+			if (_wireVerts == null || _wireVerts.Length != vCount)
+			{
+				_wireVerts = new Vector3[vCount];
+				_vertsUploadDirty = true;
+			}
+			if (_vertexVisible == null || _vertexVisible.Length != vCount)
+				_vertexVisible = new bool[vCount];
+			// Always retransform when a live deformer is active (vertices change every frame from brushing/animation).
+			// Only skip when the transform hasn't changed and there's no active deformation.
+			bool l2wChanged = l2w != _prevL2W;
+			bool hasLiveDeformer = _deformer && _deformer.DisplayMesh;
+			if (meshChanged || l2wChanged || hasLiveDeformer)
+			{
+				for (var i = 0; i < vCount; i++)
+					_wireVerts[i] = l2w.MultiplyPoint3x4(_vertexReadback[i]);
+				_prevL2W = l2w;
+				_vertsUploadDirty = true;
+				// Rebuild cull results since verts moved
+				_culledVisibleCount = 0;
+			}
+			if (!meshChanged) return;
 			_wireTris = mesh.triangles;
 			_wireMeshId = instanceID;
+			int triCount = _wireTris.Length / 3;
+			if (_triFrontFacing == null || _triFrontFacing.Length != triCount)
+				_triFrontFacing = new bool[triCount];
 			ExtractUniqueEdges(_wireTris);
 			if (_wireLineMesh)
 				Destroy(_wireLineMesh);
@@ -1310,25 +1569,25 @@ namespace BlendShapeEditor
 
 		private void OnGUI()
 		{
+			
 			Window?.DrawGUI();
 
 			if (Window == null || !Window.IsEditMode)
 				return;
 
-			DrawEditModeHud();
-
 			Event e = Event.current;
+			Input.PollKeyboard(e);
 
 			// Hotkeys — in Studio, game's UndoRedoManager handles Ctrl+Z/Y via BlendShapeEditorCommand
 			if (e.type == EventType.KeyDown && _undoStack != null && !StudioAPI.InsideStudio)
 			{
-				if (BlendShapeEditorPlugin.UndoKey.Value.IsDown() && _undoStack.CanUndo)
+				if (BlendShapeEditorPlugin.KeyUndo.Value.IsDown() && _undoStack.CanUndo)
 				{
 					UndoOneStep();
 					e.Use();
 					return;
 				}
-				if (BlendShapeEditorPlugin.RedoKey.Value.IsDown() && _undoStack.CanRedo)
+				if (BlendShapeEditorPlugin.KeyRedo.Value.IsDown() && _undoStack.CanRedo)
 				{
 					RedoOneStep();
 					e.Use();
@@ -1340,10 +1599,10 @@ namespace BlendShapeEditor
 			if (ShapeEditorWindow.IsMouseOverUI)
 				return;
 
-			Camera main = Camera.main;
+			Camera main = _camera;
 			if (!main || Input == null)
 				return;
-
+			
 			DeformData activeDeformData = Window.ActiveDeformData;
 			if (activeDeformData == null)
 				return;
@@ -1353,58 +1612,13 @@ namespace BlendShapeEditor
 				ProcessBrushEvent(e, main, activeLayer);
 			else
 				ProcessGizmoEvent(e, main, activeLayer);
-		}
-
-		private void DrawEditModeHud()
-		{
-			if (_hudStyle == null)
+			
+			if (Window.HotkeyUsed) // eat hotkey usage
 			{
-				_hudStyle = new GUIStyle(GUI.skin.box)
-				{
-					alignment = TextAnchor.UpperLeft,
-					fontSize = 13,
-					normal =
-					{
-						textColor = Color.green
-					},
-					padding = new RectOffset(8, 8, 6, 6)
-				};
+				//BSE.Logger.LogDebug("NomNomNom");
+				UnityEngine.Input.ResetInputAxes();
+				Window.HotkeyUsed = false;
 			}
-			string modeLine;
-			if (Window.OperationMode == ShapeEditorWindow.OpMode.Brush)
-			{
-				string toolName;
-				switch (Window.SelectedBrushTool)
-				{
-				case ShapeEditorWindow.BrushToolType.Move:
-					toolName = L.MoveTool;
-					break;
-				case ShapeEditorWindow.BrushToolType.Smooth:
-					toolName = L.SmoothTool;
-					break;
-				case ShapeEditorWindow.BrushToolType.Inflate:
-					toolName = L.InflateTool;
-					break;
-				default:
-					toolName = "?";
-					break;
-				}
-				modeLine = L.BrushMode + ": " + toolName;
-			}
-			else
-			{
-				modeLine = L.GizmoMode;
-			}
-			DeformData activeData = Window.ActiveDeformData;
-			DeformLayer activeLayer = activeData?.ActiveLayer;
-			string layerLine = activeLayer != null ? string.Format(L.HudLayerFmt, activeLayer.Name) : L.HudNoLayer;
-			string brushLine = $"R:{Window.BrushRadius:F2}  S:{Window.BrushStrength:F2}  F:{Window.BrushFalloff}";
-			string hudText = string.Concat(modeLine, "\n", layerLine, "\n", brushLine, "\n", L.HudShortcuts);
-			float hudWidth = 250f;
-			float hudX = (float)Screen.width - hudWidth - 360f;
-			GUIContent content = new GUIContent(hudText);
-			float hudHeight = _hudStyle.CalcHeight(content, hudWidth);
-			GUI.Box(new Rect(hudX, 10f, hudWidth, hudHeight), hudText, _hudStyle);
 		}
 
 		private void ExtractUniqueEdges(int[] triangles)
@@ -1463,6 +1677,18 @@ namespace BlendShapeEditor
 				Destroy(_wireLineMesh);
 		}
 
+		/*
+		private Color WeightColor(float weight)
+		{
+			return Color.HSVToRGB(weight, 1f, 1f);
+		}
+
+		private Color WeightColorMirror(float weight)
+		{
+			return Color.HSVToRGB(weight, 0.5f, 0.5f);
+		}
+		*/
+
 		public ShapeEditorWindow Window;
 		public SelectionTool SelectionTool;
 		public InputHelper Input;
@@ -1493,12 +1719,16 @@ namespace BlendShapeEditor
 		private UndoStack _undoStack;
 		private bool _isBrushing;
 		private Dictionary<int, Vector3> _brushBeforeSnapshot;
+		private Dictionary<int, float> _brushAffectedVertices;
+		private Dictionary<int, float> _brushMirrorAffectedVertices;
 		private Dictionary<int, float> _moveGrabVertices;
 		private BrushResult _moveGrabResult;
 		private BrushResult _moveGrabMirrorResult;
 		private Dictionary<int, Vector3> _gizmoBeforeSnapshot;
 		private Vector3[] _wireVerts;
 		private int[] _wireTris;
+		private bool[] _triFrontFacing;
+		private bool[] _vertexVisible;
 		private int _wireMeshId;
 		private float _refreshTimer;
 		private const float ColliderRefreshInterval = 0.5f;
@@ -1506,10 +1736,19 @@ namespace BlendShapeEditor
 		private Mesh _wireLineMesh;
 		private int[] _lineIndexBuffer;
 		private int[] _visibleLineIndices;
-		private int _prevVisibleCount;
+		private int _prevVisibleCount = -1;
 		private Color32[] _wireColors;
 		private bool _wireColorsDirty = true;
+		private bool _vertsUploadDirty = true;
 		private bool _prevUseSoftColors;
+		private bool _prevUseBrushColors;
+		private bool _prevHasMirror;
+		// Cull results computed in LateUpdate, consumed in OnRenderObject
+		private int _culledVisibleCount;
+		// Hover vertex detection
+		private int _hoverVertexIndex = -1;
+		private List<Vector3> _vertexReadback = new List<Vector3>();
+		private Matrix4x4 _prevL2W = Matrix4x4.zero;
 		private bool _softWeightsDirty;
 		private float _softWeightsDirtyTime;
 		private const float SoftWeightsThrottle = 0.15f;
@@ -1521,16 +1760,15 @@ namespace BlendShapeEditor
 		private Color[] _highlightColors;
 		private int _highlightVertexCount;
 		private bool _highlightActive;
-		private static readonly Gradient WeightGradient;
+		private static readonly Gradient WeightGradient = new Gradient();
+		private static readonly Gradient MirrorWeightGradient = new Gradient();
 		private bool _deferGizmoCentroidRefresh;
-		private static readonly Color WireDefaultColor = new Color(0f, 0f, 0f, 0.3f);
-		private static readonly Color32 WireDefaultColor32 = new Color32(0, 0, 0, 77);
+		private const float DotPixelSize = 4f;
 		private static readonly int SrcBlend = Shader.PropertyToID("_SrcBlend");
 		private static readonly int DstBlend = Shader.PropertyToID("_DstBlend");
 		private static readonly int Cull = Shader.PropertyToID("_Cull");
 		private static readonly int ZWrite = Shader.PropertyToID("_ZWrite");
 		private static readonly int ZTest = Shader.PropertyToID("_ZTest");
-		private GUIStyle _hudStyle;
 
 		private struct WireEdge
 		{

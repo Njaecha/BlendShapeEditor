@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using BepInEx.Configuration;
+using UnityEngine;
 using KKAPI;
 using KKAPI.Utilities;
 
@@ -51,6 +52,11 @@ namespace BlendShapeEditor
                 return false;
             }
             return true;
+        }
+
+        public static string S(this ConfigEntry<KeyboardShortcut> entry)
+        {
+            return entry.Value.ToString();
         }
     }
 }

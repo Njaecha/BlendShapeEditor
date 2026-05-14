@@ -71,6 +71,9 @@
       <Reference Include="KKS_Fix_MakerOptimizations">
         <HintPath>..\..\AdditionalDependencies\KKS_Fix_MakerOptimizations-publicized.dll</HintPath>
       </Reference>
+      <Reference Include="KKS_MaterialEditor">
+        <HintPath>..\..\AdditionalDependencies\KKS_MaterialEditor-publicized.dll</HintPath>
+      </Reference>
       <Reference Include="Sirenix.Serialization, Version=2.1.13.0, Culture=neutral, processorArchitecture=MSIL">
         <HintPath>..\packages\IllusionLibs.KoikatsuSunshine.UnityEngine.CoreModule.2019.4.9\lib\net46\Sirenix.Serialization.dll</HintPath>
       </Reference>

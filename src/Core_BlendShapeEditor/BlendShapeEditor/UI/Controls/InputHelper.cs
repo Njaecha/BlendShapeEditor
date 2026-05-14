@@ -17,7 +17,10 @@ namespace BlendShapeEditor
 		[DllImport("user32.dll")]
 		private static extern bool ScreenToClient(IntPtr hWnd, ref POINT lpPoint);
 
-		public Vector3 MousePosition { get; private set; }
+		public static Vector3 MousePosition => Input.mousePosition;
+		public static Vector2 MouseScrollDelta => Input.mouseScrollDelta;
+		
+		
 
 		public void Init()
 		{
@@ -35,9 +38,20 @@ namespace BlendShapeEditor
 			FindCameraControls();
 		}
 
-		public void PollMousePosition()
+		internal static KeyCode LastReleasedKeyCode = KeyCode.None;
+
+		public void PollKeyboard(Event e)
 		{
-			MousePosition = GetRealMousePosition();
+			if (e.type == EventType.KeyUp)
+			{
+				LastReleasedKeyCode = e.keyCode;
+				// BlendShapeEditorPlugin.Logger.LogDebug($"Up key: {LastReleasedKeyCode}");
+			}
+			// make sure keycode isn't LastReleased when it's actually pressed currently.
+			if (e.type == EventType.KeyDown && e.keyCode == LastReleasedKeyCode)
+			{
+				LastReleasedKeyCode = KeyCode.None;
+			}
 		}
 
 		public void SetCameraEnabled(bool enabled)

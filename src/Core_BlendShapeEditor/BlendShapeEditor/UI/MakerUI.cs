@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using KKAPI.Maker;
 using UnityEngine;
 
@@ -10,6 +11,7 @@ namespace BlendShapeEditor
 		{
 			MakerAPI.MakerBaseLoaded += (s, e) => OnMakerLoaded();
 			MakerAPI.MakerExiting += (s, e) => OnMakerExit();
+			MaterialEditorBridge.UserInterfacePopulate += (sender, args) => RefreshRenderers();
 		}
 
 		private static void OnMakerLoaded()
@@ -49,11 +51,19 @@ namespace BlendShapeEditor
 			if (!chaCtrl)
 				return;
 
-			BlendShapeEditorCharaController controller = chaCtrl.gameObject.GetComponent<BlendShapeEditorCharaController>();
-			if (!controller)
-				return;
+			if (_window.MatEditFilter)
+			{
+				MaterialEditorBridge.CurrentlyVisibleRenderers.ForEach(rend =>  _window.Renderers.Add(rend));
+			}
+			else
+			{
+				BlendShapeEditorCharaController controller = chaCtrl.gameObject.GetComponent<BlendShapeEditorCharaController>();
+				if (!controller)
+					return;
 
-			_window.Renderers = controller.GetAllRenderers();
+				_window.Renderers = controller.GetAllRenderers();
+			}
+
 			if (_window.SelectedRendererIndex >= _window.Renderers.Count)
 				_window.SelectedRendererIndex = -1;
 		}

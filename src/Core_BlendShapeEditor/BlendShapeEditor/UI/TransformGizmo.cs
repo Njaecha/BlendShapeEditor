@@ -11,6 +11,7 @@ namespace BlendShapeEditor
 		public GizmoSpace Space { get; set; } = GizmoSpace.World;
 		public bool SoftSelectionEnabled { get; set; }
 		public float SoftSelectionRadius { get; set; } = 0.1f;
+		public float SizeFactor { get; set; } = 0.1f;
 		public FalloffMode SoftFalloff { get; set; } = FalloffMode.Smooth;
 		public float SharpExponent { get; set; } = 3f;
 		public SoftSelectMode SoftMode { get; set; }
@@ -19,7 +20,10 @@ namespace BlendShapeEditor
 		public bool HasTarget => _targetIndices != null && _targetIndices.Count > 0;
 		public Vector3 CentroidLocal => _centroid;
 		public Dictionary<int, float> SoftWeights => _combinedSoftWeights;
+		public Dictionary<int, float> PrimarySoftWeights => _softWeights;
+		public Dictionary<int, float> MirrorSoftWeights => _mirrorWeights;
 		public bool HasMirrorTarget => _mirrorIndices != null && _mirrorIndices.Count > 0;
+		public HashSet<int> MirrorIndices => _mirrorIndices;
 		public bool SymmetryEnabled { get; set; }
 		public int SymmetryAxis { get; set; }
 		public float SymmetryCenter { get; set; }
@@ -798,7 +802,7 @@ namespace BlendShapeEditor
 
 		public void Render(Camera cam, Transform xform)
 		{
-			if (!HasTarget || cam == null || !EnsureMaterial())
+			if (!HasTarget || !cam || !EnsureMaterial())
 				return;
 
 			_glMaterial.SetPass(0);
@@ -1083,9 +1087,9 @@ namespace BlendShapeEditor
 			}
 		}
 
-		private static float GizmoScale(Camera cam, Vector3 worldPos)
+		private float GizmoScale(Camera cam, Vector3 worldPos)
 		{
-			return Vector3.Distance(cam.transform.position, worldPos) * SCREEN_SCALE;
+			return Vector3.Distance(cam.transform.position, worldPos) * SizeFactor;
 		}
 
 		private static Vector3 BaseDir(GizmoEnums axis)
@@ -1176,7 +1180,6 @@ namespace BlendShapeEditor
 		private const float PLANE_SIZE = 0.25f;
 		private const float PLANE_ALPHA = 0.35f;
 		private const float VIEW_RING_RAD = 1.1f;
-		private const float SCREEN_SCALE = 0.12f;
 
 		private static readonly Color COL_X = new Color(0.9f, 0.2f, 0.2f);
 		private static readonly Color COL_Y = new Color(0.2f, 0.9f, 0.2f);

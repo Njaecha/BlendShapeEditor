@@ -26,6 +26,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Enums\SoftSelectMode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\BlendShapeEditorItemController.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Extensions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Hooks.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\MeshHelper.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\ShapeDeformer.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\BlendShapeEditorPlugin.cs" />
@@ -33,6 +34,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Translation\L.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\UI\Controls\InputHelper.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\UI\MakerUI.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\UI\MaterialEditorBridge.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\UI\ShapeEditorWindow.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\UI\ShapePaintOverlay.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\UI\StudioUI.cs" />
