@@ -5,7 +5,7 @@ namespace BlendShapeEditor
 {
 	public class InflateTool : IDeformTool
 	{
-		public float Amount { get; set; }
+		public float Direction { get; set; }
 
 		public void Apply(DeformLayer layer, BrushResult brushResult, Vector3[] vertices, Vector3[] normals, Camera camera)
 		{
@@ -13,8 +13,8 @@ namespace BlendShapeEditor
 				return;
 
 			Vector3[] deltas = layer.Deltas;
-			float amount = Amount;
-			if (Mathf.Approximately(amount, 0f))
+			float direction = Direction;
+			if (Mathf.Approximately(direction, 0f))
 				return;
 
 			foreach (KeyValuePair<int, float> pair in brushResult.AffectedVertices)
@@ -22,7 +22,7 @@ namespace BlendShapeEditor
 				int vertexIndex = pair.Key;
 				float falloff = pair.Value;
 				if (vertexIndex >= 0 && vertexIndex < deltas.Length && vertexIndex < normals.Length)
-					deltas[vertexIndex] += normals[vertexIndex].normalized * (amount * falloff);
+					deltas[vertexIndex] += normals[vertexIndex].normalized * (direction * falloff * 0.003f);
 			}
 			layer.Dirty = true;
 		}

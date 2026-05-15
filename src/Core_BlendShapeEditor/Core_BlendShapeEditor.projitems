@@ -11,7 +11,17 @@
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\BrushResult.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\IDeformTool.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\BlobTool.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\ClayStripsTool.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\ClayThumbTool.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\ClayTool.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\CreaseTool.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\DrawSharpTool.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\DrawTool.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\FillTool.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\FlattenTool.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\InflateTool.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\LayerTool.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\MoveTool.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\SelectionTool.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\SmoothTool.cs" />

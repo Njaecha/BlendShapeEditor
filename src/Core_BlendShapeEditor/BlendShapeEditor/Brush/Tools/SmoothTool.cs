@@ -6,6 +6,7 @@ namespace BlendShapeEditor
 {
 	public class SmoothTool : IDeformTool
 	{
+		public float Direction { get; set; }
 		public List<int>[] Adjacency { get; private set; }
 
 		public void BuildAdjacency(int[] triangles, int vertexCount, Vector3[] vertices = null)
@@ -63,6 +64,7 @@ namespace BlendShapeEditor
 			if (!Adjacency[a].Contains(b)) Adjacency[a].Add(b);
 			if (!Adjacency[b].Contains(a)) Adjacency[b].Add(a);
 		}
+		
 
 		public void Apply(DeformLayer layer, BrushResult brushResult, Vector3[] vertices, Vector3[] normals, Camera camera)
 		{

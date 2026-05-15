@@ -47,6 +47,16 @@ namespace BlendShapeEditor
         public static string SmoothToolTooltipFmt;
         public static string InflateToolLabelFmt;
         public static string InflateToolTooltipFmt;
+        public static string DrawTool;
+        public static string DrawSharpTool;
+        public static string BlobTool;
+        public static string ClayTool;
+        public static string ClayStripsTool;
+        public static string ClayThumbTool;
+        public static string CreaseTool;
+        public static string LayerTool;
+        public static string FillTool;
+        public static string FlattenTool;
 
         // Brush sliders
         public static string BrushRadiusFmt;

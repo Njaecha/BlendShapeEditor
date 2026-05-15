@@ -127,7 +127,7 @@ namespace BlendShapeEditor
 				if (OperationMode == OpMode.Brush)
 				{
 					GUILayout.Label(i18n.HelpBrushToolsHeader, "Box");
-					GUILayout.Label(string.Format(i18n.HelpBrushTools, BSE.KeyBrushMove.S(), BSE.KeyBrushSmooth.S(), BSE.KeyBrushInflate.S()), _helpLabelStyle);
+					GUILayout.Label(string.Format(i18n.HelpBrushTools, BSE.KeyBrushMove.ValueString(), BSE.KeyBrushSmooth.ValueString(), BSE.KeyBrushInflate.ValueString()), _helpLabelStyle);
 					GUILayout.Label(i18n.HelpBrushParamsHeader, "Box");
 					GUILayout.Label(i18n.HelpBrushParams, _helpLabelStyle);
 				}
@@ -136,21 +136,21 @@ namespace BlendShapeEditor
 					GUILayout.Label(i18n.HelpGizmoSelectionHeader, "Box");
 					GUILayout.Label(i18n.HelpGizmoSelection, _helpLabelStyle);
 					GUILayout.Label(i18n.HelpGizmoToolsHeader, "Box");
-					GUILayout.Label(string.Format(i18n.HelpGizmoTools, BSE.KeyGizmoTranslate.S(), BSE.KeyGizmoRotate.S(), BSE.KeyGizmoScale.S()), _helpLabelStyle);
-					GUILayout.Label(string.Format(i18n.HelpGizmoSpaceHeader, BSE.KeyGizmoCycleGizmoSpace.S()), "Box");
+					GUILayout.Label(string.Format(i18n.HelpGizmoTools, BSE.KeyGizmoTranslate.ValueString(), BSE.KeyGizmoRotate.ValueString(), BSE.KeyGizmoScale.ValueString()), _helpLabelStyle);
+					GUILayout.Label(string.Format(i18n.HelpGizmoSpaceHeader, BSE.KeyGizmoCycleGizmoSpace.ValueString()), "Box");
 					GUILayout.Label(i18n.HelpGizmoSpace, _helpLabelStyle);
-					GUILayout.Label(string.Format(i18n.HelpGizmoSoftSelectionHeader, BSE.KeyGizmoSoftSelection.S()), "Box");
-					GUILayout.Label(string.Format(i18n.HelpGizmoSoftSelection, BSE.KeyGizmoCycleSoftMode.S()), _helpLabelStyle);
+					GUILayout.Label(string.Format(i18n.HelpGizmoSoftSelectionHeader, BSE.KeyGizmoSoftSelection.ValueString()), "Box");
+					GUILayout.Label(string.Format(i18n.HelpGizmoSoftSelection, BSE.KeyGizmoCycleSoftMode.ValueString()), _helpLabelStyle);
 				}
 			}
-			GUILayout.Label(string.Format(i18n.HelpMirrorHeader, BSE.KeyMirror.S()), "Box");
+			GUILayout.Label(string.Format(i18n.HelpMirrorHeader, BSE.KeyMirror.ValueString()), "Box");
 			GUILayout.Label(i18n.HelpMirror, _helpLabelStyle);
 			GUILayout.Label(i18n.HelpLayersHeader, "Box");
-			GUILayout.Label(string.Format(i18n.HelpLayers, BSE.KeyLayerNew.S(), BSE.KeyLayerRemove.S(), BSE.KeyLayerNext.S(), BSE.KeyLayerPrevious.S(), BSE.KeyLayerDown.S(), BSE.KeyLayerUp.S(), BSE.KeyLayerOpacityDown.S(), BSE.KeyLayerOpacityUp.S()), _helpLabelStyle);
+			GUILayout.Label(string.Format(i18n.HelpLayers, BSE.KeyLayerNew.ValueString(), BSE.KeyLayerRemove.ValueString(), BSE.KeyLayerNext.ValueString(), BSE.KeyLayerPrevious.ValueString(), BSE.KeyLayerDown.ValueString(), BSE.KeyLayerUp.ValueString(), BSE.KeyLayerOpacityDown.ValueString(), BSE.KeyLayerOpacityUp.ValueString()), _helpLabelStyle);
 			GUILayout.Label(i18n.HelpBakeHeader, "Box");
 			GUILayout.Label(i18n.HelpBake, _helpLabelStyle);
 			GUILayout.Label(i18n.HelpAdditionalHeader, "Box");
-			GUILayout.Label(string.Format(i18n.HelpAdditional, BSE.KeyUndo.S(), BSE.KeyRedo.S()), _helpLabelStyle);
+			GUILayout.Label(string.Format(i18n.HelpAdditional, BSE.KeyUndo.ValueString(), BSE.KeyRedo.ValueString()), _helpLabelStyle);
 			GUILayout.EndScrollView();
 		}
 
@@ -195,7 +195,7 @@ namespace BlendShapeEditor
 				OperationMode = OpMode.Brush;
 				DeferUpdateWireColors = true;
 			}
-			GUILayout.Label($"[{BSE.KeyMode.S()}]", _labelTextCenterStyle, GUILayout.Width(30));
+			GUILayout.Label($"[{BSE.KeyMode.ValueString()}]", _labelTextCenterStyle, GUILayout.Width(30));
 			if (GUILayout.Toggle(OperationMode == OpMode.Gizmo, i18n.GizmoMode, "Button"))
 			{
 				OperationMode = OpMode.Gizmo;
@@ -238,19 +238,15 @@ namespace BlendShapeEditor
 
 		private void DrawBrushControls()
 		{
-			GUILayout.BeginHorizontal();
-			Color guic = GUI.color;
-			GUI.color = BSE.BrushColorMove.Value;
-			if (Hotkey(BSE.KeyBrushMove) || GUILayout.Toggle(SelectedBrushTool == BrushToolType.Move, new GUIContent(string.Format(i18n.MoveToolLabelFmt, BSE.KeyBrushMove.S()), string.Format(i18n.MoveToolTooltipFmt, BSE.KeyBrushMove.S())), "Button"))
-				SelectedBrushTool = BrushToolType.Move;
-			GUI.color = BSE.BrushColorSmooth.Value;
-			if (Hotkey(BSE.KeyBrushSmooth) || GUILayout.Toggle(SelectedBrushTool == BrushToolType.Smooth, new GUIContent(string.Format(i18n.SmoothToolLabelFmt, BSE.KeyBrushSmooth.S()), string.Format(i18n.SmoothToolTooltipFmt, BSE.KeyBrushSmooth.S())), "Button"))
-				SelectedBrushTool = BrushToolType.Smooth;
-			GUI.color = BSE.BrushColorInflate.Value;
-			if (Hotkey(BSE.KeyBrushInflate) || GUILayout.Toggle(SelectedBrushTool == BrushToolType.Inflate, new GUIContent(string.Format(i18n.InflateToolLabelFmt, BSE.KeyBrushInflate.S()), string.Format(i18n.InflateToolTooltipFmt, BSE.KeyBrushInflate.S())), "Button"))
-				SelectedBrushTool = BrushToolType.Inflate;
-			GUI.color = guic;
-			GUILayout.EndHorizontal();
+			string[] brushNames = {
+				"Move", "Smooth", "Inflate", "Draw", "DrawS",
+				"Blob", "Clay", "ClStrp", "ClThmb",
+				"Crease", "Layer", "Fill", "Flatten"
+			};
+			int selected = (int)SelectedBrushTool;
+			int newSelected = GUILayout.SelectionGrid(selected, brushNames, 4);
+			if (newSelected != selected)
+				SelectedBrushTool = (BrushToolType)newSelected;
 
 			GUILayout.BeginHorizontal();
 			GUILayout.Label(string.Format(i18n.BrushRadiusFmt, BrushRadius.ToString("F3")));
@@ -274,15 +270,15 @@ namespace BlendShapeEditor
 
 			DrawMirrorControls();
 		}
-
+		
 		private void DrawGizmoControls()
 		{
 			GUILayout.BeginHorizontal();
-			if (Hotkey(BSE.KeyGizmoTranslate) || GUILayout.Toggle(GizmoModeIndex == 0, string.Format(i18n.TranslateLabelFmt, BSE.KeyGizmoTranslate.S()), "Button"))
+			if (Hotkey(BSE.KeyGizmoTranslate) || GUILayout.Toggle(GizmoModeIndex == 0, string.Format(i18n.TranslateLabelFmt, BSE.KeyGizmoTranslate.ValueString()), "Button"))
 				GizmoModeIndex = 0;
-			if (Hotkey(BSE.KeyGizmoRotate) || GUILayout.Toggle(GizmoModeIndex == 1, string.Format(i18n.RotateLabelFmt, BSE.KeyGizmoRotate.S()), "Button"))
+			if (Hotkey(BSE.KeyGizmoRotate) || GUILayout.Toggle(GizmoModeIndex == 1, string.Format(i18n.RotateLabelFmt, BSE.KeyGizmoRotate.ValueString()), "Button"))
 				GizmoModeIndex = 1;
-			if (Hotkey(BSE.KeyGizmoScale) || GUILayout.Toggle(GizmoModeIndex == 2, string.Format(i18n.ScaleLabelFmt, BSE.KeyGizmoScale.S()), "Button"))
+			if (Hotkey(BSE.KeyGizmoScale) || GUILayout.Toggle(GizmoModeIndex == 2, string.Format(i18n.ScaleLabelFmt, BSE.KeyGizmoScale.ValueString()), "Button"))
 				GizmoModeIndex = 2;
 			GUILayout.EndHorizontal();
 
@@ -309,7 +305,7 @@ namespace BlendShapeEditor
 			if (Hotkey(BSE.KeyGizmoSoftSelection)) GizmoSoftSelection = !GizmoSoftSelection;
 			GUILayout.BeginHorizontal();
 			GizmoSoftSelection = GUILayout.Toggle(GizmoSoftSelection, i18n.SoftSelection);
-			GUILayout.Label($"[{BSE.KeyGizmoSoftSelection.S()}]", _labelTextRightStyle);
+			GUILayout.Label($"[{BSE.KeyGizmoSoftSelection.ValueString()}]", _labelTextRightStyle);
 			GUILayout.EndHorizontal();
 			if (GizmoSoftSelection)
 			{
@@ -318,9 +314,9 @@ namespace BlendShapeEditor
 					SoftSelectModeIndex = SoftSelectModeIndex == 0 ? 1 : 0;
 				}
 				GUILayout.BeginHorizontal();
-				if (GUILayout.Toggle(SoftSelectModeIndex == 0, new GUIContent(i18n.SoftModeVolume, string.Format(i18n.SoftModeVolumeTooltipFmt, BSE.KeyGizmoSoftSelection.S())), "Button"))
+				if (GUILayout.Toggle(SoftSelectModeIndex == 0, new GUIContent(i18n.SoftModeVolume, string.Format(i18n.SoftModeVolumeTooltipFmt, BSE.KeyGizmoSoftSelection.ValueString())), "Button"))
 					SoftSelectModeIndex = 0;
-				if (GUILayout.Toggle(SoftSelectModeIndex == 1, new GUIContent(i18n.SoftModeSurface, string.Format(i18n.SoftModeSurfaceTooltipFmt, BSE.KeyGizmoSoftSelection.S())), "Button"))
+				if (GUILayout.Toggle(SoftSelectModeIndex == 1, new GUIContent(i18n.SoftModeSurface, string.Format(i18n.SoftModeSurfaceTooltipFmt, BSE.KeyGizmoSoftSelection.ValueString())), "Button"))
 					SoftSelectModeIndex = 1;
 				GUILayout.EndHorizontal();
 
@@ -356,7 +352,7 @@ namespace BlendShapeEditor
 			if (Hotkey(BSE.KeyMirror)) MirrorEnabled = !MirrorEnabled;
 			GUILayout.BeginHorizontal();
 			MirrorEnabled = GUILayout.Toggle(MirrorEnabled, i18n.Mirror);
-			GUILayout.Label($"[{BSE.KeyMirror.S()}]", _labelTextRightStyle);
+			GUILayout.Label($"[{BSE.KeyMirror.ValueString()}]", _labelTextRightStyle);
 			GUILayout.EndHorizontal();
 			if (!MirrorEnabled)
 				return;
@@ -385,7 +381,7 @@ namespace BlendShapeEditor
 		private void DrawLayerPanel(DeformData data)
 		{
 			GUILayout.Label(i18n.Layers, "Box");
-			if (Hotkey(BSE.KeyLayerNew) || GUILayout.Button(string.Format(i18n.AddLayerFmt, BSE.KeyLayerNew.S())))
+			if (Hotkey(BSE.KeyLayerNew) || GUILayout.Button(string.Format(i18n.AddLayerFmt, BSE.KeyLayerNew.ValueString())))
 				DeferLayerAdd = true;
 
 			if (data == null || data.Layers.Count == 0)
@@ -415,7 +411,7 @@ namespace BlendShapeEditor
 				{ 
 					guic = GUI.color;
 					if (isActive) GUI.color = new Color(0.4f, 0.8f, 1f);
-					if (GUILayout.Button(new GUIContent(layer.Name, string.Format(i18n.LayerSelectTooltipFmt, BSE.KeyLayerNext.S(), BSE.KeyLayerPrevious.S())), _layerButtonStyle, GUILayout.MinWidth(100f)))
+					if (GUILayout.Button(new GUIContent(layer.Name, string.Format(i18n.LayerSelectTooltipFmt, BSE.KeyLayerNext.ValueString(), BSE.KeyLayerPrevious.ValueString())), _layerButtonStyle, GUILayout.MinWidth(100f)))
 					{
 						data.SetActiveLayer(i);
 					}
@@ -442,13 +438,13 @@ namespace BlendShapeEditor
 
 				GUILayout.Label(layer.Weight.ToString("F2"), GUILayout.Width(30f));
 				if (i == 0) GUI.enabled = false;
-				if (GUILayout.Button(new GUIContent("˄", string.Format(i18n.LayerMoveUpTooltipFmt, BSE.KeyLayerUp.S())), _smallButtonStyle, GUILayout.Width(20f)))
+				if (GUILayout.Button(new GUIContent("˄", string.Format(i18n.LayerMoveUpTooltipFmt, BSE.KeyLayerUp.ValueString())), _smallButtonStyle, GUILayout.Width(20f)))
 				{
 					DeferLayerMoveUp = i;
 				}
 				GUI.enabled = true;
 				if (i == data.Layers.Count - 1) GUI.enabled = false;
-				if (GUILayout.Button(new GUIContent("˅", string.Format(i18n.LayerMoveDownTooltipFmt, BSE.KeyLayerDown.S())), _smallButtonStyle, GUILayout.Width(20f)))
+				if (GUILayout.Button(new GUIContent("˅", string.Format(i18n.LayerMoveDownTooltipFmt, BSE.KeyLayerDown.ValueString())), _smallButtonStyle, GUILayout.Width(20f)))
 				{
 					DeferLayerMoveDown = i;
 				}
@@ -460,7 +456,7 @@ namespace BlendShapeEditor
 				}
 				Color guicColor = GUI.color;
 				GUI.color = Color.red;
-				if (GUILayout.Button(new GUIContent("╳", string.Format(i18n.LayerRemoveTooltipFmt, BSE.KeyLayerRemove.S())), _smallButtonStyle, GUILayout.Width(20f)))
+				if (GUILayout.Button(new GUIContent("╳", string.Format(i18n.LayerRemoveTooltipFmt, BSE.KeyLayerRemove.ValueString())), _smallButtonStyle, GUILayout.Width(20f)))
 				{
 					DeferLayerRemove = i;
 				}
@@ -770,7 +766,17 @@ namespace BlendShapeEditor
 		{
 			Move,
 			Smooth,
-			Inflate
+			Inflate,
+			Draw,
+			DrawSharp,
+			Blob,
+			Clay,
+			ClayStrips,
+			ClayThumb,
+			Crease,
+			Layer,
+			Fill,
+			Flatten
 		}
 	}
 }
