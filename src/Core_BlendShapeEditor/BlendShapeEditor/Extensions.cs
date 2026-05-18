@@ -54,7 +54,7 @@ namespace BlendShapeEditor
             return true;
         }
 
-        public static string ValueString(this ConfigEntry<KeyboardShortcut> entry)
+        public static string S(this ConfigEntry<KeyboardShortcut> entry)
         {
             return entry.Value.ToString();
         }
