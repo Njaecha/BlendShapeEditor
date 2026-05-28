@@ -79,7 +79,7 @@
   "HelpRenderers": "Pick a skinned mesh renderer to edit it's mesh. Since only skinned mesh renderers support Blendshapes, static meshes are not supported.",
   "HelpBrushToolsHeader": "Brushes",
   "HelpBrushTools":
-  "Sculpt the mesh using [Left-Click] with the these tools:\n- Move [{0}]: drags vertices along screen direction. Hold Shift to push/pull along the normal.\n- Smooth [{1}]: averages vertex positions within the brush.\n- Inflate [{2}]: pushes along the normal. Hold [Alt] to deflate.",
+  "Sculpt the mesh using [Left-Click] with the these tools:\n- Move [{0}]: drags vertices along screen direction. Hold Shift to push/pull along the normal.\n- Smooth [{1}]: averages vertex positions within the brush.\n- Inflate [{2}]: pushes along the normal. Hold [Ctrl] to deflate.",
   "HelpBrushParamsHeader": "Parameters",
   "HelpBrushParams": "- Radius [Scroll]: brush size.\n- Strength [Alt+Scroll]: per-frame influence.\n- Falloff: Linear / Smooth / Sharp.",
   "HelpGizmoSelectionHeader": "Selection",
