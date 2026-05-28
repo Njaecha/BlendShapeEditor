@@ -21,7 +21,7 @@ namespace BlendShapeEditor
     {
         public const string GUID = "org.njaecha.plugins.blendshapeeditor";
         public const string PluginName = "BlendShapeEditor";
-        public const string Version = "0.0.3";
+        public const string Version = "0.1.0";
 
         internal new static ManualLogSource Logger;
         public static BlendShapeEditorPlugin Instance;

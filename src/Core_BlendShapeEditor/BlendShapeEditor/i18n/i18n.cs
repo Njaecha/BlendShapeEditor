@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using BepInEx.Logging;
+using LitJson;
 using MessagePack;
 using UnityEngine;
 
@@ -171,7 +172,7 @@ namespace BlendShapeEditor
                 }
             }
 
-            Newtonsoft.Json.Linq.JObject data = Newtonsoft.Json.Linq.JObject.Parse(json);
+            JsonData data = JsonMapper.ToObject(json);
 
             var fields = typeof(i18n).GetFields(BindingFlags.Public | BindingFlags.Static);
             foreach (var field in fields)
@@ -181,11 +182,13 @@ namespace BlendShapeEditor
                 if (attr != null)
                     jsonKey = attr.Key;
 
-                Newtonsoft.Json.Linq.JToken token = data[jsonKey];
-                if (token != null)
+                if (data.Keys.Contains(jsonKey))
                 {
-                    string value = (string)token;
-                    field.SetValue(null, value);
+                    JsonData token = data[jsonKey];
+                    if (token != null && token.IsString)
+                    {
+                        field.SetValue(null, (string)token);
+                    }
                 }
             }
         }
