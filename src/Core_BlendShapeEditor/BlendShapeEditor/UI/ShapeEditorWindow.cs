@@ -220,7 +220,7 @@ namespace BlendShapeEditor
 		{
 			GUILayout.Label(i18n.BakeHeader, "Box");
 			GUILayout.BeginHorizontal();
-			GUILayout.Label(i18n.BakeNameLabel, GUILayout.Width(45f));
+			GUILayout.Label(i18n.BakeNameLabel, GUILayout.Width(55f));
 			_bakeNameInput = GUILayout.TextField(_bakeNameInput);
 			GUILayout.EndHorizontal();
 
@@ -238,19 +238,45 @@ namespace BlendShapeEditor
 
 		private void DrawBrushControls()
 		{
-			GUILayout.BeginHorizontal();
-			Color guic = GUI.color;
-			GUI.color = BSE.BrushColorMove.Value;
-			if (Hotkey(BSE.KeyBrushMove) || GUILayout.Toggle(SelectedBrushTool == BrushToolType.Move, new GUIContent(string.Format(i18n.MoveToolLabelFmt, BSE.KeyBrushMove.S()), string.Format(i18n.MoveToolTooltipFmt, BSE.KeyBrushMove.S())), "Button"))
-				SelectedBrushTool = BrushToolType.Move;
-			GUI.color = BSE.BrushColorSmooth.Value;
-			if (Hotkey(BSE.KeyBrushSmooth) || GUILayout.Toggle(SelectedBrushTool == BrushToolType.Smooth, new GUIContent(string.Format(i18n.SmoothToolLabelFmt, BSE.KeyBrushSmooth.S()), string.Format(i18n.SmoothToolTooltipFmt, BSE.KeyBrushSmooth.S())), "Button"))
-				SelectedBrushTool = BrushToolType.Smooth;
-			GUI.color = BSE.BrushColorInflate.Value;
-			if (Hotkey(BSE.KeyBrushInflate) || GUILayout.Toggle(SelectedBrushTool == BrushToolType.Inflate, new GUIContent(string.Format(i18n.InflateToolLabelFmt, BSE.KeyBrushInflate.S()), string.Format(i18n.InflateToolTooltipFmt, BSE.KeyBrushInflate.S())), "Button"))
-				SelectedBrushTool = BrushToolType.Inflate;
-			GUI.color = guic;
-			GUILayout.EndHorizontal();
+			if (!_showAdvancedBrushes)
+			{
+				GUILayout.BeginHorizontal();
+				Color guic = GUI.color;
+				GUI.color = BSE.BrushColorMove.Value;
+				if (Hotkey(BSE.KeyBrushMove) || GUILayout.Toggle(SelectedBrushTool == BrushToolType.Move, new GUIContent(string.Format(i18n.MoveToolLabelFmt, BSE.KeyBrushMove.S()), string.Format(i18n.MoveToolTooltipFmt, BSE.KeyBrushMove.S())), "Button"))
+					SelectedBrushTool = BrushToolType.Move;
+				GUI.color = BSE.BrushColorSmooth.Value;
+				if (Hotkey(BSE.KeyBrushSmooth) || GUILayout.Toggle(SelectedBrushTool == BrushToolType.Smooth, new GUIContent(string.Format(i18n.SmoothToolLabelFmt, BSE.KeyBrushSmooth.S()), string.Format(i18n.SmoothToolTooltipFmt, BSE.KeyBrushSmooth.S())), "Button"))
+					SelectedBrushTool = BrushToolType.Smooth;
+				GUI.color = BSE.BrushColorInflate.Value;
+				if (Hotkey(BSE.KeyBrushInflate) || GUILayout.Toggle(SelectedBrushTool == BrushToolType.Inflate, new GUIContent(string.Format(i18n.InflateToolLabelFmt, BSE.KeyBrushInflate.S()), string.Format(i18n.InflateToolTooltipFmt, BSE.KeyBrushInflate.S())), "Button"))
+					SelectedBrushTool = BrushToolType.Inflate;
+				GUI.color = guic;
+				if (GUILayout.Button(new GUIContent("▼", "Open advanced brush selection"), _smallButtonStyle, GUILayout.Width(20f)))
+				{
+					_showAdvancedBrushes = true;
+				}
+				GUILayout.EndHorizontal();
+			}
+			else
+			{
+				string[] brushNames = {
+					"Move", "Smooth", "Inflate", "Draw", "DrawS",
+					"Blob", "Clay", "ClStrp", "ClThmb",
+					"Crease", "Layer", "Fill", "Flatten"
+				};
+				int selected = (int)SelectedBrushTool;
+				int newSelected = GUILayout.SelectionGrid(selected, brushNames, 4);
+				if (newSelected != selected)
+					SelectedBrushTool = (BrushToolType)newSelected;
+				
+				Rect lastRect = GUILayoutUtility.GetLastRect();
+				if (GUI.Button(new Rect(lastRect.x + lastRect.width - 22, lastRect.y + lastRect.height - 22, 20, 20),
+					    new GUIContent("▲", "Close advanced brush selection"), _smallButtonStyle))
+				{
+					_showAdvancedBrushes = false;
+				}
+			}
 
 			GUILayout.BeginHorizontal();
 			GUILayout.Label(string.Format(i18n.BrushRadiusFmt, BrushRadius.ToString("F3")));
@@ -274,7 +300,7 @@ namespace BlendShapeEditor
 
 			DrawMirrorControls();
 		}
-
+		
 		private void DrawGizmoControls()
 		{
 			GUILayout.BeginHorizontal();
@@ -722,6 +748,7 @@ namespace BlendShapeEditor
 		private Texture2D _bgTex;
 		private bool _showHelp;
 		private bool _expandRendererPanel;
+		private bool _showAdvancedBrushes;
 		private Rect _helpWindowRect;
 		private Vector2 _helpScroll;
 		private GUIStyle _helpLabelStyle;
@@ -770,7 +797,17 @@ namespace BlendShapeEditor
 		{
 			Move,
 			Smooth,
-			Inflate
+			Inflate,
+			Draw,
+			DrawSharp,
+			Blob,
+			Clay,
+			ClayStrips,
+			ClayThumb,
+			Crease,
+			Layer,
+			Fill,
+			Flatten
 		}
 	}
 }

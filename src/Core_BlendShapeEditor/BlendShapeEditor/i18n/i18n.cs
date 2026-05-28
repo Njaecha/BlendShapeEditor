@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using BepInEx.Logging;
+using LitJson;
 using MessagePack;
 using UnityEngine;
 
@@ -47,6 +48,16 @@ namespace BlendShapeEditor
         public static string SmoothToolTooltipFmt;
         public static string InflateToolLabelFmt;
         public static string InflateToolTooltipFmt;
+        public static string DrawTool;
+        public static string DrawSharpTool;
+        public static string BlobTool;
+        public static string ClayTool;
+        public static string ClayStripsTool;
+        public static string ClayThumbTool;
+        public static string CreaseTool;
+        public static string LayerTool;
+        public static string FillTool;
+        public static string FlattenTool;
 
         // Brush sliders
         public static string BrushRadiusFmt;
@@ -161,7 +172,7 @@ namespace BlendShapeEditor
                 }
             }
 
-            Newtonsoft.Json.Linq.JObject data = Newtonsoft.Json.Linq.JObject.Parse(json);
+            JsonData data = JsonMapper.ToObject(json);
 
             var fields = typeof(i18n).GetFields(BindingFlags.Public | BindingFlags.Static);
             foreach (var field in fields)
@@ -171,11 +182,13 @@ namespace BlendShapeEditor
                 if (attr != null)
                     jsonKey = attr.Key;
 
-                Newtonsoft.Json.Linq.JToken token = data[jsonKey];
-                if (token != null)
+                if (data.Keys.Contains(jsonKey))
                 {
-                    string value = (string)token;
-                    field.SetValue(null, value);
+                    JsonData token = data[jsonKey];
+                    if (token != null && token.IsString)
+                    {
+                        field.SetValue(null, (string)token);
+                    }
                 }
             }
         }

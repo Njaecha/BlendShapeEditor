@@ -5,6 +5,7 @@ namespace BlendShapeEditor
 {
 	public class MoveTool : IDeformTool
 	{
+		public float Direction { get; set; }
 		public Vector2 MouseDelta { get; set; }
 		public float DragDelta { get; set; }
 		public bool UseViewPlane { get; set; }
@@ -12,6 +13,7 @@ namespace BlendShapeEditor
 		public ShapeDeformer Deformer { get; set; }
 
 		public int MirrorAxis { get; set; } = -1;
+
 
 		public void Apply(DeformLayer layer, BrushResult brushResult, Vector3[] vertices, Vector3[] normals, Camera camera)
 		{

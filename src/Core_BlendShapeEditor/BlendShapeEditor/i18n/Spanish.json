@@ -79,7 +79,7 @@
   "HelpRenderers": "Selecciona un Renderer de una Skinned Mesh para editar su Maya. Como solo los Renderers de Skinned Mesh soportan BlendShapes, las mayas estáticas no son compatibles.",
   "HelpBrushToolsHeader": "Pinceles",
   "HelpBrushTools":
-  "Esculpe la Maya usando [Click Izquierdo] con estas \"herramientas\":\n- Mover [{0}]: arrastra vértices según la dirección de la pantalla. Mantén Shift para empujar o tirar siguiendo la normal.\n- Suavizar [{1}]: promedia las posiciones de los vértices dentro del pincel.\n- Inflar [{2}]: empuja siguiendo la normal. Mantén [Alt] para desinflar.",
+  "Esculpe la Maya usando [Click Izquierdo] con estas \"herramientas\":\n- Mover [{0}]: arrastra vértices según la dirección de la pantalla. Mantén Shift para empujar o tirar siguiendo la normal.\n- Suavizar [{1}]: promedia las posiciones de los vértices dentro del pincel.\n- Inflar [{2}]: empuja siguiendo la normal. Mantén [Ctrl] para desinflar.",
   "HelpBrushParamsHeader": "Parámetros",
   "HelpBrushParams": "- Radio [Scroll]: tamaño del pincel.\n- Fuerza [Alt+Scroll]: influencia por frame.\n- \"Decaimiento\": Lineal / Suave / Agudo.",
   "HelpGizmoSelectionHeader": "Selección",

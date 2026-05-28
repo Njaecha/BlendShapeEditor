@@ -240,6 +240,17 @@ namespace BlendShapeEditor
 				_smoothTool = new SmoothTool();
 			if (_inflateTool == null)
 				_inflateTool = new InflateTool();
+			// TODO Add ifs, also fuck this shit, use fucking Activator.CreateInstance next time on a single field
+			_drawTool = new DrawTool();
+			_drawSharpTool = new DrawSharpTool();
+			_blobTool = new BlobTool();
+			_clayTool = new ClayTool();
+			_clayStripsTool = new ClayStripsTool();
+			_clayThumbTool = new ClayThumbTool();
+			_creaseTool = new CreaseTool();
+			_layerTool = new LayerTool();
+			_fillTool = new FillTool();
+			_flattenTool = new FlattenTool();
 			if (_gizmo == null)
 				_gizmo = new TransformGizmo();
 			_moveTool.Deformer = _deformer;
@@ -266,6 +277,7 @@ namespace BlendShapeEditor
 			Mesh mesh = MeshHelper.GetMesh(renderer);
 			if (!mesh) return;
 			_smoothTool.BuildAdjacency(mesh.triangles, mesh.vertexCount, mesh.vertices);
+			_fillTool.Adjacency = _smoothTool.Adjacency;
 			Window.VertexCount = mesh.vertexCount;
 			ActivateHighlight(mesh.vertexCount);
 		}
@@ -674,6 +686,10 @@ namespace BlendShapeEditor
 				// end brush when left-click-up
 				if (e.type == EventType.MouseUp && e.button == 0)
 				{
+					_clayTool.StrokeStarted = false;
+					_clayStripsTool.StrokeStarted = false;
+					_clayThumbTool.StrokeStarted = false;
+					_lastBrushWorldPosition = null;
 					_isBrushing = false;
 					_moveGrabVertices = null;
 					_moveGrabResult = null;
@@ -693,8 +709,14 @@ namespace BlendShapeEditor
 			Vector3[] deltas = activeLayer.Deltas;
 			Vector3[] cachedVertices = SelectionTool.CachedVertices;
 			Vector3[] cachedNormals = SelectionTool.CachedNormals;
-			IDeformTool activeTool = GetActiveBrushTool();
+			bool shouldSmooth = e.shift && _isBrushing;
+			float direction = e.control ? -1f : 1f;
+			IDeformTool smoothTool = _smoothTool;
+			IDeformTool activeTool = shouldSmooth ? smoothTool : GetActiveBrushTool();
 			if (activeTool == null) return;
+
+			if (!(activeTool is MoveTool))
+				activeTool.Direction = direction;
 
 			BrushResult brushResult;
 
@@ -717,7 +739,7 @@ namespace BlendShapeEditor
 				}
 				brushResult = _moveGrabResult;
 				moveTool.RendererTransform = _targetRenderer ? _targetRenderer.transform : null;
-				moveTool.UseViewPlane = !e.shift;
+				moveTool.UseViewPlane = !e.alt;
 				Vector3 hitScreen = cam.WorldToScreenPoint(brushResult.HitPoint);
 				Vector3 hitWorld = cam.ScreenToWorldPoint(hitScreen);
 				Vector3 hitWorldOffset = cam.ScreenToWorldPoint(new Vector3(hitScreen.x + 1f, hitScreen.y, hitScreen.z));
@@ -736,14 +758,47 @@ namespace BlendShapeEditor
 				brushResult = SelectionTool.BrushSelect(ray);
 				if (brushResult == null || brushResult.AffectedVertices.Count == 0)
 					return;
-				if (activeTool is InflateTool inflateTool)
-					inflateTool.Amount = e.alt ? -0.005f : 0.005f;
 			}
 
 			foreach (KeyValuePair<int, float> pair in brushResult.AffectedVertices.Where(pair => !_brushBeforeSnapshot.ContainsKey(pair.Key)))
 			{
 				_brushBeforeSnapshot[pair.Key] = deltas[pair.Key];
 			}
+			
+			if (_lastBrushWorldPosition.HasValue && brushResult != null)
+			{
+				Vector3 strokeDir = (brushResult.HitPoint - _lastBrushWorldPosition.Value).normalized;
+				if (activeTool is ClayStripsTool strips)
+					strips.StrokeDirection = strokeDir;
+				if (activeTool is ClayThumbTool thumb)
+					thumb.StrokeDirection = strokeDir;
+			}
+			_lastBrushWorldPosition = brushResult?.HitPoint;
+			
+			if (!shouldSmooth && _isBrushing && brushResult != null)
+			{
+				if (activeTool is ClayTool clay && !clay.StrokeStarted)
+				{
+					clay.StrokePlaneOrigin = brushResult.HitPoint;
+					clay.StrokePlaneNormal = brushResult.HitNormal;
+					clay.StrokeStarted = true;
+				}
+				if (activeTool is ClayStripsTool strips && !strips.StrokeStarted)
+				{
+					strips.StrokePlaneOrigin = brushResult.HitPoint;
+					strips.StrokePlaneNormal = brushResult.HitNormal;
+					strips.StrokeStarted = true;
+				}
+				if (activeTool is ClayThumbTool thumb && !thumb.StrokeStarted)
+				{
+					thumb.StrokePlaneOrigin = brushResult.HitPoint;
+					thumb.StrokePlaneNormal = brushResult.HitNormal;
+					thumb.StrokeStarted = true;
+				}
+				if (activeTool is FlattenTool flatten)
+					flatten.PlaneComputed = false;
+			}
+			
 			activeTool.Apply(activeLayer, brushResult, cachedVertices, cachedNormals, cam);
 			_brushAffectedVertices = brushResult.AffectedVertices;
 			if (!_symmetryEnabled || !_targetRenderer)
@@ -1097,14 +1152,20 @@ namespace BlendShapeEditor
 		{
 			switch (Window.SelectedBrushTool)
 			{
-			case ShapeEditorWindow.BrushToolType.Move:
-				return _moveTool;
-			case ShapeEditorWindow.BrushToolType.Smooth:
-				return _smoothTool;
-			case ShapeEditorWindow.BrushToolType.Inflate:
-				return _inflateTool;
-			default:
-				return _moveTool;
+				case ShapeEditorWindow.BrushToolType.Move:       return _moveTool;
+				case ShapeEditorWindow.BrushToolType.Smooth:     return _smoothTool;
+				case ShapeEditorWindow.BrushToolType.Inflate:    return _inflateTool;
+				case ShapeEditorWindow.BrushToolType.Draw:       return _drawTool;
+				case ShapeEditorWindow.BrushToolType.DrawSharp:  return _drawSharpTool;
+				case ShapeEditorWindow.BrushToolType.Blob:       return _blobTool;
+				case ShapeEditorWindow.BrushToolType.Clay:       return _clayTool;
+				case ShapeEditorWindow.BrushToolType.ClayStrips: return _clayStripsTool;
+				case ShapeEditorWindow.BrushToolType.ClayThumb:  return _clayThumbTool;
+				case ShapeEditorWindow.BrushToolType.Crease:     return _creaseTool;
+				case ShapeEditorWindow.BrushToolType.Layer:      return _layerTool;
+				case ShapeEditorWindow.BrushToolType.Fill:       return _fillTool;
+				case ShapeEditorWindow.BrushToolType.Flatten:    return _flattenTool;
+				default: return _moveTool;
 			}
 		}
 
@@ -1157,18 +1218,21 @@ namespace BlendShapeEditor
 			Color col;
 			switch (Window.SelectedBrushTool)
 			{
-				case ShapeEditorWindow.BrushToolType.Move:
-					col = BSE.BrushColorMove.Value;
-					break;
-				case ShapeEditorWindow.BrushToolType.Smooth:
-					col = BSE.BrushColorSmooth.Value;
-					break;
-				case ShapeEditorWindow.BrushToolType.Inflate:
-					col = BSE.BrushColorInflate.Value;
-					break;
-				default:
-					col = new Color(1, 1, 0, 0.9f);
-					break;
+				case ShapeEditorWindow.BrushToolType.Move:       col = BSE.BrushColorMove.Value; break;
+				case ShapeEditorWindow.BrushToolType.Smooth:     col = BSE.BrushColorSmooth.Value; break;
+				case ShapeEditorWindow.BrushToolType.Inflate:    col = BSE.BrushColorInflate.Value; break;
+				// Can't be fucked to add colors for these
+				/*case ShapeEditorWindow.BrushToolType.Draw:       col = BSE.BrushColorDraw.Value; break;
+				case ShapeEditorWindow.BrushToolType.DrawSharp:  col = BSE.BrushColorDrawSharp.Value; break;
+				case ShapeEditorWindow.BrushToolType.Blob:       col = BSE.BrushColorBlob.Value; break;
+				case ShapeEditorWindow.BrushToolType.Clay:       col = BSE.BrushColorClay.Value; break;
+				case ShapeEditorWindow.BrushToolType.ClayStrips: col = BSE.BrushColorClayStrips.Value; break;
+				case ShapeEditorWindow.BrushToolType.ClayThumb:  col = BSE.BrushColorClayThumb.Value; break;
+				case ShapeEditorWindow.BrushToolType.Crease:     col = BSE.BrushColorCrease.Value; break;
+				case ShapeEditorWindow.BrushToolType.Layer:      col = BSE.BrushColorLayer.Value; break;
+				case ShapeEditorWindow.BrushToolType.Fill:       col = BSE.BrushColorFill.Value; break;
+				case ShapeEditorWindow.BrushToolType.Flatten:    col = BSE.BrushColorFlatten.Value; break;*/
+				default: col = new Color(1, 1, 0, 0.9f); break;
 			}
 			GL.Color(col);
 			for (var i = 0; i < 32; i++)
@@ -1701,6 +1765,16 @@ namespace BlendShapeEditor
 		private MoveTool _moveTool;
 		private SmoothTool _smoothTool;
 		private InflateTool _inflateTool;
+		private DrawTool _drawTool;
+		private DrawSharpTool _drawSharpTool;
+		private BlobTool _blobTool;
+		private ClayTool _clayTool;
+		private ClayStripsTool _clayStripsTool;
+		private ClayThumbTool _clayThumbTool;
+		private CreaseTool _creaseTool;
+		private LayerTool _layerTool;
+		private FillTool _fillTool;
+		private FlattenTool _flattenTool;
 		private TransformGizmo _gizmo;
 		private Material _cursorMaterial;
 		private Vector3 _lastHitPoint;
@@ -1718,6 +1792,7 @@ namespace BlendShapeEditor
 		private Vector2 _boxEnd;
 		private UndoStack _undoStack;
 		private bool _isBrushing;
+		private Vector3? _lastBrushWorldPosition;
 		private Dictionary<int, Vector3> _brushBeforeSnapshot;
 		private Dictionary<int, float> _brushAffectedVertices;
 		private Dictionary<int, float> _brushMirrorAffectedVertices;
