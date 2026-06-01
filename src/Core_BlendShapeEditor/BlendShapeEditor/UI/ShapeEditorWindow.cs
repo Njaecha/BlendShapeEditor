@@ -271,11 +271,18 @@ namespace BlendShapeEditor
 					SelectedBrushTool = (BrushToolType)newSelected;
 				
 				Rect lastRect = GUILayoutUtility.GetLastRect();
+				#if KKS
 				if (GUI.Button(new Rect(lastRect.x + lastRect.width - 22, lastRect.y + lastRect.height - 22, 20, 20),
 					    new GUIContent("▲", "Close advanced brush selection"), _smallButtonStyle))
 				{
 					_showAdvancedBrushes = false;
 				}
+				#else
+				if (GUILayout.Button(new GUIContent("▲ Close Advanced Brushes", "Close advanced brush selection")))
+				{
+					_showAdvancedBrushes = false;
+				}
+				#endif
 			}
 
 			GUILayout.BeginHorizontal();

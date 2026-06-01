@@ -864,6 +864,12 @@ namespace BlendShapeEditor
 			mesh.AddBlendShapeFrame(shapeName, 100f, combinedDelta, outDeltaNormals, null);
 			int idx = mesh.GetBlendShapeIndex(shapeName);
 			BlendShapeEditorPlugin.Logger.LogInfo($"BakeToBlendShape: baked '{shapeName}' as blendshape index {idx}");
+			#if KK
+			BlendShapeEditorPlugin.Logger.LogInfo($"Fixing stuck blendshape '{shapeName}' on {_smr.name}");
+			Mesh actualMesh = _smr.sharedMesh;
+			_smr.sharedMesh = null; // reset mesh to force SMR to recache mesh data
+			_smr.sharedMesh = actualMesh;
+			#endif
 			return idx;
 		}
 
