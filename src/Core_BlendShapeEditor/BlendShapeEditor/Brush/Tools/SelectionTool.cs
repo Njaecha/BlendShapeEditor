@@ -180,12 +180,13 @@ namespace BlendShapeEditor
 			float radius = Radius;
 			float strength = Strength;
 
+			float localRadius = _tempCollider.transform.InverseTransformVector(new Vector3(radius, 0, 0)).magnitude;
 			if (_grid != null && _cachedVertices != null)
 			{
-				_grid.FindVerticesInRadius(localPoint, radius, (i, distSq) =>
+				_grid.FindVerticesInRadius(localPoint, localRadius, (i, distSq) =>
 				{
 					float dist = Mathf.Sqrt(distSq);
-					float falloff = CalculateFalloff(dist / radius);
+					float falloff = CalculateFalloff(dist / localRadius);
 					affected[i] = falloff * strength;
 				});
 			}
@@ -195,14 +196,14 @@ namespace BlendShapeEditor
 				if (verts == null)
 					return null;
 
-				float radiusSq = radius * radius;
+				float radiusSq = localRadius * localRadius;
 				for (int j = 0; j < verts.Length; j++)
 				{
 					float sqDist = (verts[j] - localPoint).sqrMagnitude;
 					if (sqDist <= radiusSq)
 					{
 						float dist = Mathf.Sqrt(sqDist);
-						float falloff = CalculateFalloff(dist / radius);
+						float falloff = CalculateFalloff(dist / localRadius);
 						affected[j] = falloff * strength;
 					}
 				}
@@ -219,10 +220,11 @@ namespace BlendShapeEditor
 			Dictionary<int, float> affected = new Dictionary<int, float>();
 			float radius = Radius;
 			float strength = Strength;
-			_grid.FindVerticesInRadius(localPoint, radius, (i, distSq) =>
+			float localRadius = _tempCollider.transform.InverseTransformVector(new Vector3(radius, 0, 0)).magnitude;
+			_grid.FindVerticesInRadius(localPoint, localRadius, (i, distSq) =>
 			{
 				float dist = Mathf.Sqrt(distSq);
-				float falloff = CalculateFalloff(dist / radius);
+				float falloff = CalculateFalloff(dist / localRadius);
 				affected[i] = falloff * strength;
 			});
 
