@@ -59,6 +59,18 @@ namespace BlendShapeEditor
 
 			float radiusSq = radius * radius;
 			int cellRadius = Mathf.CeilToInt(radius * _invCell);
+			// If the grid is too small, just iterate over all vertices.
+			int cellSpan = cellRadius * 2 + 1;
+			if (cellSpan * cellSpan * cellSpan > _vertices.Length)
+			{
+				for (int i = 0; i < _vertices.Length; i++)
+				{
+					float distSq = (_vertices[i] - queryPos).sqrMagnitude;
+					if (distSq <= radiusSq)
+						callback(i, distSq);
+				}
+				return;
+			}
 			int cellX = Mathf.FloorToInt(queryPos.x * _invCell);
 			int cellY = Mathf.FloorToInt(queryPos.y * _invCell);
 			int cellZ = Mathf.FloorToInt(queryPos.z * _invCell);
