@@ -231,7 +231,7 @@ namespace BlendShapeEditor
 			renderer.TryGetOwningController(out Object controller);
 			if (controller is BlendShapeEditorCharaController charaController)
 			{
-				Animator animator = charaController.ChaControl.GetOCIChar().charAnimeCtrl.animator;
+				Animator animator = charaController.ChaControl.animBody;
 				if (animator.enabled)
 				{
 					_animatorTurnedOff = animator;
