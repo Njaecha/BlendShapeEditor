@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Configuration;
+using JetBrains.Annotations;
 using KKAPI.Utilities;
 using UnityEngine;
 using BSE = BlendShapeEditor.BlendShapeEditorPlugin;
@@ -30,8 +31,8 @@ namespace BlendShapeEditor
 		public float GizmoSoftRadius { get; set; }
 		public float GizmoSizeFactor { get; set; }
 		public FalloffMode GizmoFalloff { get; set; }
-		public bool CullBackVertices { get; set; }
 		public bool CullBackWireframe { get; set; } = true;
+		public VertexDisplayType VertexDisplayMode = VertexDisplayType.BackfaceCulling;
 		public bool IsEditMode { get; private set; }
 
 		public ShapeEditorWindow(int windowId, Rect initialRect)
@@ -219,16 +220,31 @@ namespace BlendShapeEditor
 		private void DrawBakeControls()
 		{
 			GUILayout.Label(i18n.BakeHeader, "Box");
+			BakeSeparate = GUILayout.Toggle(BakeSeparate, new GUIContent(i18n.BakeSeparateLabel, i18n.BakeSeparateTooltip));
 			GUILayout.BeginHorizontal();
-			GUILayout.Label(i18n.BakeNameLabel, GUILayout.Width(55f));
+			GUILayout.Label(BakeSeparate ? i18n.BakePrefixLabel : i18n.BakeNameLabel, GUILayout.Width(55f));
+			var prevNameInput = _bakeNameInput;
 			_bakeNameInput = GUILayout.TextField(_bakeNameInput);
+			if (prevNameInput != _bakeNameInput)
+			{
+				BakeShapeName = _bakeNameInput;
+				DeferCheckNameAvailability = true;
+			}
 			GUILayout.EndHorizontal();
 
 			bool hasLayers = ActiveDeformData != null && ActiveDeformData.HasLayers;
 			bool prev = GUI.enabled;
 			if (!hasLayers || !IsEditMode)
 				GUI.enabled = false;
-			if (GUILayout.Button(i18n.BakeButton))
+			if (BakeNameingIssues != null)
+			{
+				var guic = GUI.color;
+				GUI.color = Color.yellow;
+				GUILayout.Label("Following name(s) already exist and cannot be used:");
+				GUILayout.Label(BakeNameingIssues);
+				GUI.color = guic;
+			}
+			else if (GUILayout.Button(i18n.BakeButton))
 			{
 				BakeShapeName = _bakeNameInput;
 				DeferBake = true;
@@ -379,8 +395,23 @@ namespace BlendShapeEditor
 		private void DrawCullingToggles()
 		{
 			GUILayout.BeginHorizontal();
-			CullBackVertices = GUILayout.Toggle(CullBackVertices, i18n.CullBackVertices);
-			CullBackWireframe = GUILayout.Toggle(CullBackWireframe, i18n.CullBackWireframe);
+			string label;
+			switch (VertexDisplayMode)
+			{
+				case VertexDisplayType.All: label = i18n.VertexDisplayAll; break;
+				case VertexDisplayType.BackfaceCulling: label = i18n.VertexDisplayBackface; break;
+				case VertexDisplayType.Interact: label = i18n.VertexDisplayInteract; break;
+				default: label = VertexDisplayMode.ToString(); break;
+			}
+			if (GUILayout.Button(new GUIContent(label, i18n.VertexDisplayTooltip)))
+			{
+				int i = (int)VertexDisplayMode + 1;
+				if (i >= Enum.GetNames(typeof(VertexDisplayType)).Length) i = 0;
+				VertexDisplayMode = (VertexDisplayType)i;
+			}
+			string wireLabel = CullBackWireframe ? i18n.WireframeCullOn : i18n.WireframeCullOff;
+			if (GUILayout.Button(new GUIContent(wireLabel, i18n.WireframeCullTooltip)))
+				CullBackWireframe = !CullBackWireframe;
 			GUILayout.EndHorizontal();
 		}
 
@@ -419,7 +450,10 @@ namespace BlendShapeEditor
 		{
 			GUILayout.Label(i18n.Layers, "Box");
 			if (Hotkey(BSE.KeyLayerNew) || GUILayout.Button(string.Format(i18n.AddLayerFmt, BSE.KeyLayerNew.S())))
+			{
 				DeferLayerAdd = true;
+				DeferCheckNameAvailability = true;
+			}
 
 			if (data == null || data.Layers.Count == 0)
 				return;
@@ -440,7 +474,10 @@ namespace BlendShapeEditor
 					if (GUILayout.Button("OK", _smallButtonStyle, GUILayout.Width(30f)))
 					{
 						if (!string.IsNullOrEmpty(_renamingText))
+						{
 							data.RenameLayer(i, _renamingText);
+							DeferCheckNameAvailability = true;
+						}
 						_renamingLayerIndex = -1;
 					}
 				}
@@ -781,7 +818,10 @@ namespace BlendShapeEditor
 		public int DeferLayerMoveUp = -1;
 		public int DeferLayerMoveDown = -1;
 		public bool DeferBake;
+		public bool DeferCheckNameAvailability;
+		[CanBeNull] internal string BakeNameingIssues = null;
 		public string BakeShapeName = "BSE_Shape";
+		public bool BakeSeparate = true;
 
 		private int _weightSliderLayer = -1;
 		private float _weightSliderBefore;
@@ -791,6 +831,7 @@ namespace BlendShapeEditor
 
 		public List<Renderer> Renderers = new List<Renderer>();
 		public int SelectedRendererIndex = -1;
+		public Renderer SelectedRenderer => Renderers[Mathf.Clamp(SelectedRendererIndex, 0, Renderers.Count - 1)];
 		public DeformData ActiveDeformData;
 		public int VertexCount;
 
@@ -815,6 +856,13 @@ namespace BlendShapeEditor
 			Layer,
 			Fill,
 			Flatten
+		}
+
+		public enum VertexDisplayType
+		{
+			All,
+			BackfaceCulling,
+			Interact
 		}
 	}
 }

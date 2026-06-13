@@ -3,6 +3,7 @@ using System.Linq;
 using KKAPI;
 using KKAPI.Chara;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace BlendShapeEditor
 {

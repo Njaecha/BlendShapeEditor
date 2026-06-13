@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.Rendering;
+using BSE = BlendShapeEditor.BlendShapeEditorPlugin;
 
 namespace BlendShapeEditor
 {
+	[DefaultExecutionOrder(32000)]
 	public class ShapeDeformer : MonoBehaviour
 	{
 		public DeformData DeformData { get; set; }
@@ -16,10 +18,13 @@ namespace BlendShapeEditor
 		}
 
 		public bool StudioMode { get; set; }
+		public static bool ForceBakePath = false;
 
 		public Mesh DisplayMesh => _displayMesh;
 
-		public Transform DisplayTransform => _displayGo != null ? _displayGo.transform : null;
+		public Transform DisplayTransform => _displayGo ? _displayGo.transform : null;
+		
+		internal List<string> ExistingBlendShapeNames = new List<string>();
 
 		public void Init(SkinnedMeshRenderer smr)
 		{
@@ -30,7 +35,7 @@ namespace BlendShapeEditor
 			bool meshNotReadable = smr.sharedMesh && !smr.sharedMesh.isReadable;
 			if (meshNotReadable)
 			{
-				BlendShapeEditorPlugin.Logger.LogInfo("ShapeDeformer.Init: mesh '" + smr.sharedMesh.name + "' is not readable, forcing BakeMesh path");
+				BSE.Logger.LogInfo("ShapeDeformer.Init: mesh '" + smr.sharedMesh.name + "' is not readable, forcing BakeMesh path");
 				StudioMode = false;
 			}
 
@@ -48,6 +53,11 @@ namespace BlendShapeEditor
 			_sourceMeshRenderer = null;
 			_restVertices = null;
 
+			for (var index = 0; index < smr.sharedMesh.blendShapeCount; index++)
+			{
+				ExistingBlendShapeNames.Add(smr.sharedMesh.GetBlendShapeName(index));
+			}
+			
 			if (StudioMode)
 			{
 				Mesh sharedMesh = smr.sharedMesh;
@@ -101,11 +111,12 @@ namespace BlendShapeEditor
 			if (!_displayMesh)
 				_displayMesh = new Mesh();
 
-			if (meshNotReadable)
+			if (meshNotReadable || ForceBakePath)
 			{
 				bool smrWasDisabled = !smr.enabled;
 				if (smrWasDisabled)
 					smr.enabled = true;
+				BSE.Logger.LogDebug($"Baking SkinnedMeshRenderer {smr.name}");
 				smr.BakeMesh(_displayMesh);
 				if (smrWasDisabled)
 					smr.enabled = false;
@@ -818,7 +829,7 @@ namespace BlendShapeEditor
 		private bool _editMode;                        // true while the editor has called EnterEditMode
 		private Material _editMaterial;                // solid-color material used to tint the display mesh in edit mode
 		private Color[] _editColors;                   // per-vertex colors written to _bakedMesh to show brush influence
-
+		
 		/// <summary>
 		/// Bakes the current combined deformation into a new blendshape on the SMR's mesh.
 		/// Returns the blendshape index, or -1 on failure.
@@ -830,14 +841,24 @@ namespace BlendShapeEditor
 			outDeltaVerts = null;
 			outDeltaNormals = null;
 
-			if (!_smr || !_smr.sharedMesh)
-			{
-				BlendShapeEditorPlugin.Logger.LogWarning("BakeToBlendShape: no SMR or mesh");
-				return -1;
-			}
 			if (DeformData == null || !DeformData.HasLayers)
 			{
 				BlendShapeEditorPlugin.Logger.LogWarning("BakeToBlendShape: no layers to bake");
+				return -1;
+			}
+
+			return BakeToBlendShape(shapeName, DeformData.ComputeFinalDelta(), out outDeltaVerts, out outDeltaNormals, computeDeltaNormals);
+		}
+
+		public int BakeToBlendShape(string shapeName, Vector3[] delta, out Vector3[] outDeltaVerts, out Vector3[] outDeltaNormals,
+			bool computeDeltaNormals = true)
+		{
+			outDeltaVerts = null;
+			outDeltaNormals = null;
+
+			if (!_smr || !_smr.sharedMesh)
+			{
+				BlendShapeEditorPlugin.Logger.LogWarning("BakeToBlendShape: no SMR or mesh");
 				return -1;
 			}
 
@@ -845,23 +866,22 @@ namespace BlendShapeEditor
 			Vector3[] bindVerts = mesh.vertices;
 			int vertCount = bindVerts.Length;
 
-			Vector3[] combinedDelta = DeformData.ComputeFinalDelta();
-			if (combinedDelta == null || combinedDelta.Length != vertCount)
+			if (delta == null || delta.Length != vertCount)
 			{
 				BlendShapeEditorPlugin.Logger.LogWarning("BakeToBlendShape: delta length mismatch");
 				return -1;
 			}
 
-			outDeltaVerts = combinedDelta;
+			outDeltaVerts = delta;
 
 			if (computeDeltaNormals)
 			{
 				Vector3[] bindNormals = mesh.normals;
 				int[] triangles = mesh.triangles;
-				outDeltaNormals = MeshHelper.ComputePartialDeltaNormals(bindVerts, bindNormals, combinedDelta, triangles);
+				outDeltaNormals = MeshHelper.ComputePartialDeltaNormals(bindVerts, bindNormals, delta, triangles);
 			}
 
-			mesh.AddBlendShapeFrame(shapeName, 100f, combinedDelta, outDeltaNormals, null);
+			mesh.AddBlendShapeFrame(shapeName, 100f, delta, outDeltaNormals, null);
 			int idx = mesh.GetBlendShapeIndex(shapeName);
 			BlendShapeEditorPlugin.Logger.LogInfo($"BakeToBlendShape: baked '{shapeName}' as blendshape index {idx}");
 			#if KK

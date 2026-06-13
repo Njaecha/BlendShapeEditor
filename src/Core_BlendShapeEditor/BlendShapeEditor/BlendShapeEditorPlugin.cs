@@ -21,7 +21,7 @@ namespace BlendShapeEditor
     {
         public const string GUID = "org.njaecha.plugins.blendshapeeditor";
         public const string PluginName = "BlendShapeEditor";
-        public const string Version = "0.2.0";
+        public const string Version = "0.3.0";
 
         internal new static ManualLogSource Logger;
         public static BlendShapeEditorPlugin Instance;
@@ -35,6 +35,9 @@ namespace BlendShapeEditor
         public static ConfigEntry<float> GizmoSoftSelectionScrollMod { get; private set; }
         public static ConfigEntry<i18n.Language> UILanguage { get; private set; }
         public static ConfigEntry<int> UndoMaxSteps { get; private set; }
+        public static ConfigEntry<bool> UndoLayerWeights { get; private set; }
+
+        public static ConfigEntry<float> VertexDotSize { get; private set; }
 
         #region Colors
 
@@ -274,16 +277,22 @@ namespace BlendShapeEditor
                     "Modifier that controls how fast the Gizmo Soft Selection changes when scrolling the mouse wheel.",
                     new AcceptableValueRange<float>(0.1f, 3f)));
 
-            DefaultBrushRadius = Config.Bind("Blend Shape Editor", "Default Brush Radius", 0.05f,
+            DefaultBrushRadius = Config.Bind("General", "Default Brush Radius", 0.05f,
                 new ConfigDescription("Default brush radius", new AcceptableValueRange<float>(0.001f, 1f)));
 
-            DefaultBrushStrength = Config.Bind("Blend Shape Editor", "Default Brush Strength", 0.5f,
+            DefaultBrushStrength = Config.Bind("General", "Default Brush Strength", 0.5f,
                 new ConfigDescription("Default brush strength", new AcceptableValueRange<float>(0.01f, 1f)));
+            
+            VertexDotSize = Config.Bind("General", "Vertex Dot Size", 4f,
+                new ConfigDescription("Size of the Dot displayed for each vertex", new AcceptableValueList<float>(2f, 3f, 4f, 5f, 6f)));
 
             UILanguage = Config.Bind("General", "UI Language", i18n.Language.English, "UI display language");
 
-            UndoMaxSteps = Config.Bind("Blend Shape Editor", "Undo Max Steps", 50,
+            UndoMaxSteps = Config.Bind("General", "Undo Max Steps", 50,
                 new ConfigDescription("Maximum number of undo steps", new AcceptableValueRange<int>(1, 200)));
+
+            UndoLayerWeights = Config.Bind("General", "Record Layer Weight Changes in Undo", false,
+                "When enabled, every layer-weight slider release pushes an undo entry. Disable to prevent the undo stack from filling up while dragging weight sliders.");
 
             i18n.SetLanguage(UILanguage.Value);
             UILanguage.SettingChanged += (s, e) => i18n.SetLanguage(UILanguage.Value);

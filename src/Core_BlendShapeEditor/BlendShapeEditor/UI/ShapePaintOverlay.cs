@@ -67,7 +67,7 @@ namespace BlendShapeEditor
 
 		private void Update()
 		{
-			if (BlendShapeEditorPlugin.KeyStudioToggle.Value.IsDown())
+			if (BSE.KeyStudioToggle.Value.IsDown())
 			{
 				Window?.Toggle();
 				if (Window != null && Window.Visible)
@@ -151,7 +151,8 @@ namespace BlendShapeEditor
 			{
 				int weightUndoLayer = Window.WeightUndoLayer;
 				Window.WeightUndoLayer = -1;
-				if (_undoStack != null && Window.ActiveDeformData != null && weightUndoLayer < Window.ActiveDeformData.Layers.Count)
+				if (BlendShapeEditorPlugin.UndoLayerWeights.Value
+				    && _undoStack != null && Window.ActiveDeformData != null && weightUndoLayer < Window.ActiveDeformData.Layers.Count)
 				{
 					_undoStack.Push(new LayerWeightUndoEntry(Window.ActiveDeformData.Layers[weightUndoLayer], Window.WeightUndoBefore, Window.WeightUndoAfter));
 					StudioUndoBridge.PushDummy(this);
@@ -179,6 +180,29 @@ namespace BlendShapeEditor
 				_symmetryCenter = 0f;
 				_symmetryCenterSet = false;
 			}
+
+			if (Window.DeferCheckNameAvailability && _deformer)
+			{
+				BSE.Logger.LogDebug("Checking Name Availability");
+				if (!Window.BakeSeparate)
+				{
+					Window.BakeNameingIssues = _deformer.ExistingBlendShapeNames.Contains(Window.BakeShapeName) ? Window.BakeShapeName : null;
+				}
+				else
+				{
+					var badNames = new List<string>();
+					foreach (DeformLayer deformLayer in Window.ActiveDeformData.Layers)
+					{
+						if (_deformer.ExistingBlendShapeNames.Contains(Window.BakeShapeName + "_" + deformLayer.Name))
+						{
+							badNames.Add(Window.BakeShapeName + "_" + deformLayer.Name);
+						}
+					}
+
+					Window.BakeNameingIssues = badNames.Count > 0 ? string.Join(", ", badNames.ToArray()) : null;
+				}
+				Window.DeferCheckNameAvailability = false;
+			}
 			if (Window.DeferBake)
 			{
 				Window.DeferBake = false;
@@ -186,12 +210,12 @@ namespace BlendShapeEditor
 			}
 		}
 
+		private Animator _animatorTurnedOff = null;
 		private void DoEnterEditMode()
 		{
 			if (Window.Renderers.Count == 0)
 				return;
-			int index = Mathf.Clamp(Window.SelectedRendererIndex, 0, Window.Renderers.Count - 1);
-			Renderer renderer = Window.Renderers[index];
+			Renderer renderer = Window.SelectedRenderer;
 			if (!renderer)
 				return;
 			DeformData deformData = GetDeformDataForRenderer(renderer, out bool studioMode);
@@ -203,6 +227,18 @@ namespace BlendShapeEditor
 				deformer.StudioMode = studioMode;
 				deformer.DeformData = deformData;
 			}
+
+			renderer.TryGetOwningController(out Object controller);
+			if (controller is BlendShapeEditorCharaController charaController)
+			{
+				Animator animator = charaController.ChaControl.GetOCIChar().charAnimeCtrl.animator;
+				if (animator.enabled)
+				{
+					_animatorTurnedOff = animator;
+					animator.enabled = false;
+				}
+			}
+			
 			switch (renderer)
 			{
 				case SkinnedMeshRenderer smr:
@@ -257,12 +293,12 @@ namespace BlendShapeEditor
 			_gizmo.Deformer = _deformer;
 			Transform objectRoot = null;
 			
-			switch (renderer.TryGetOwningController(out Object controller))
+			switch (controller)
 			{
-				case true when controller is BlendShapeEditorCharaController charCtrl:
+				case BlendShapeEditorCharaController charCtrl:
 					objectRoot = charCtrl.RootTransform;
 					break;
-				case true when controller is BlendShapeEditorItemController itemCtrl:
+				case BlendShapeEditorItemController itemCtrl:
 					objectRoot = itemCtrl.RootTransform;
 					break;
 			}
@@ -282,7 +318,7 @@ namespace BlendShapeEditor
 			ActivateHighlight(mesh.vertexCount);
 		}
 
-		private void DoExitEditMode()
+		internal void DoExitEditMode()
 		{
 			if (_gizmo != null && _gizmo.IsDragging)
 				_gizmo.EndDrag();
@@ -313,6 +349,10 @@ namespace BlendShapeEditor
 			StudioUndoBridge.ClearBSECommands();
 			_undoStack = null;
 			_isBrushing = false;
+			if (_animatorTurnedOff)
+			{
+				_animatorTurnedOff.enabled = true;
+			}
 		}
 
 		private void DoBake()
@@ -321,38 +361,84 @@ namespace BlendShapeEditor
 				return;
 			if (Window.ActiveDeformData == null || !Window.ActiveDeformData.HasLayers)
 				return;
-			string shapeName = Window.BakeShapeName;
-			if (string.IsNullOrEmpty(shapeName))
-				shapeName = "BSE_Shape";
-			int bsIndex = _deformer.BakeToBlendShape(shapeName, out Vector3[] deltaVerts, out Vector3[] deltaNormals);
-			if (bsIndex < 0)
-				return;
-			
-			smr.SetBlendShapeWeight(bsIndex, 100f);
-			
-			bool foundController = _deformer.TryGetOwningController(out Object controller);
-			string path;
-			switch (foundController)
+			string prefix = Window.BakeShapeName;
+			if (string.IsNullOrEmpty(prefix))
+				prefix = "BSE_Shape";
+
+			if (Window.BakeSeparate)
 			{
-				case true when controller is BlendShapeEditorItemController itemCtrl: 
-					path = itemCtrl.RootTransform.GetPathToChild(smr.transform);
-					BlendShapeCreatorBridge.RegisterBlendShapeStudio(itemCtrl.ItemCtrlInfo, path, shapeName, deltaVerts, deltaNormals);
-					RefreshPoseController(itemCtrl.gameObject);
-					break;
-				case true when controller is BlendShapeEditorCharaController charCtrl:
-					path = charCtrl.RootTransform.GetPathToChild(smr.transform);
-					BlendShapeCreatorBridge.RegisterBlendShapeMaker(charCtrl.ChaControl, path, shapeName, deltaVerts, deltaNormals);
-					RefreshPoseController(charCtrl.gameObject);
-					break;
-				default:
-					BlendShapeEditorPlugin.Logger.LogError("Could not bake and register Blendshape");
-					BlendShapeEditorPlugin.Logger.LogError("ShapePaintOverlay.EnterBake() -> Controller is null");
+				var layers = new List<DeformLayer>(Window.ActiveDeformData.Layers);
+				foreach (DeformLayer layer in layers)
+				{
+					if (layer?.Deltas == null)
+						continue;
+					Vector3[] scaled;
+					if (Mathf.Approximately(layer.Weight, 1f))
+					{
+						scaled = layer.Deltas;
+					}
+					else
+					{
+						scaled = new Vector3[layer.Deltas.Length];
+						for (var i = 0; i < scaled.Length; i++)
+							scaled[i] = layer.Deltas[i] * layer.Weight;
+					}
+					var shapeName = $"{prefix}_{layer.Name}";
+					int bsIndex = _deformer.BakeToBlendShape(shapeName, scaled, out Vector3[] deltaVerts, out Vector3[] deltaNormals);
+					if (bsIndex < 0)
+					{
+						BSE.Logger.LogWarning($"DoBake: skipping layer '{layer.Name}' — bake failed");
+						continue;
+					}
+					smr.SetBlendShapeWeight(bsIndex, 100f);
+					if (!RegisterBakedShape(smr, shapeName, deltaVerts, deltaNormals))
+						return;
+				}
+			}
+			else
+			{
+				int bsIndex = _deformer.BakeToBlendShape(prefix, out Vector3[] deltaVerts, out Vector3[] deltaNormals);
+				if (bsIndex < 0)
 					return;
+				smr.SetBlendShapeWeight(bsIndex, 100f);
+				if (!RegisterBakedShape(smr, prefix, deltaVerts, deltaNormals))
+					return;
+				Window.IncrementBakeShapeName();
 			}
 
-			Window.IncrementBakeShapeName();
 			Window.ActiveDeformData.ClearLayers();
 			DoExitEditMode();
+		}
+
+		private bool RegisterBakedShape(SkinnedMeshRenderer smr, string shapeName, Vector3[] deltaVerts, Vector3[] deltaNormals)
+		{
+			if (!_deformer.TryGetOwningController(out Object controller))
+			{
+				BSE.Logger.LogError("Could not bake and register Blendshape");
+				BSE.Logger.LogError("ShapePaintOverlay.RegisterBakedShape() -> Controller is null");
+				return false;
+			}
+			switch (controller)
+			{
+				case BlendShapeEditorItemController itemCtrl:
+				{
+					string path = itemCtrl.RootTransform.GetPathToChild(smr.transform);
+					BlendShapeCreatorBridge.RegisterBlendShapeStudio(itemCtrl.ItemCtrlInfo, path, shapeName, deltaVerts, deltaNormals);
+					RefreshPoseController(itemCtrl.gameObject);
+					return true;
+				}
+				case BlendShapeEditorCharaController charCtrl:
+				{
+					string path = charCtrl.RootTransform.GetPathToChild(smr.transform);
+					BlendShapeCreatorBridge.RegisterBlendShapeMaker(charCtrl.ChaControl, path, shapeName, deltaVerts, deltaNormals);
+					RefreshPoseController(charCtrl.gameObject);
+					return true;
+				}
+				default:
+					BSE.Logger.LogError("Could not bake and register Blendshape");
+					BSE.Logger.LogError("ShapePaintOverlay.RegisterBakedShape() -> Controller is null");
+					return false;
+			}
 		}
 
 		private static void RefreshPoseController(GameObject poseControllerOwner)
@@ -373,8 +459,7 @@ namespace BlendShapeEditor
 			{
 				if (Window.Renderers.Count == 0)
 					return;
-				int index = Mathf.Clamp(Window.SelectedRendererIndex, 0, Window.Renderers.Count - 1);
-				Renderer renderer = Window.Renderers[index];
+				Renderer renderer = Window.SelectedRenderer;
 				if (!renderer)
 					return;
 				DeformData deformData = GetDeformDataForRenderer(renderer, out bool studioMode);
@@ -417,12 +502,11 @@ namespace BlendShapeEditor
 			}
 		}
 
-		private Renderer GetCurrentRenderer()
+		internal Renderer GetCurrentRenderer()
 		{
 			if (Window == null || Window.Renderers.Count == 0)
 				return null;
-			int index = Mathf.Clamp(Window.SelectedRendererIndex, 0, Window.Renderers.Count - 1);
-			return Window.Renderers[index];
+			return Window.SelectedRenderer;
 		}
 
 		private static DeformData GetDeformDataForRenderer(Renderer renderer, out bool studioMode)
@@ -618,7 +702,7 @@ namespace BlendShapeEditor
 			// Both Input.MousePosition and WorldToScreenPoint use screen space (Y=0 at bottom) — compare directly
 			float bestDistSq = DotPixelSize * DotPixelSize * 4f; // search radius = 2× dot size in pixels
 			int bestIdx = -1;
-			bool restrictToVisible = Window != null && Window.CullBackVertices
+			bool restrictToVisible = Window != null && Window.CullBackWireframe
 				&& _vertexVisible != null && _vertexVisible.Length == _wireVerts.Length;
 			for (var i = 0; i < _wireVerts.Length; i++)
 			{
@@ -1062,7 +1146,7 @@ namespace BlendShapeEditor
 				float screenYMin = Screen.height - yMax;
 				float screenYMax = Screen.height - yMin;
 				Rect screenRect = new Rect(xMin, screenYMin, xMax - xMin, screenYMax - screenYMin);
-				bool[] visMask = (Window != null && Window.CullBackVertices) ? _vertexVisible : null;
+				bool[] visMask = (Window != null && Window.CullBackWireframe) ? _vertexVisible : null;
 				if ((mods & EventModifiers.Control) != 0)
 					SelectionTool.DeselectBox(cam, screenRect, visMask);
 				else
@@ -1280,14 +1364,22 @@ namespace BlendShapeEditor
 			Dictionary<int, float> mirrorSoftWeights = useGizmoSoftGradient && _gizmo.HasMirrorTarget ? _gizmo.MirrorSoftWeights : null;
 			Dictionary<int, float> brushAffected = inBrushMode ? _brushAffectedVertices : null;
 			Dictionary<int, float> brushMirrorAffected = inBrushMode ? _brushMirrorAffectedVertices : null;
-			bool hideOccludedDots = Window != null && Window.CullBackVertices
+			ShapeEditorWindow.VertexDisplayType displayMode = Window != null ? Window.VertexDisplayMode : ShapeEditorWindow.VertexDisplayType.All;
+			bool hideOccludedDots = displayMode == ShapeEditorWindow.VertexDisplayType.BackfaceCulling
 				&& _vertexVisible != null && _vertexVisible.Length == _wireVerts.Length;
+			bool interactOnly = displayMode == ShapeEditorWindow.VertexDisplayType.Interact;
 			GL.Begin(4); // triangles
 			for (var i = 0; i < _wireVerts.Length; i++)
 			{
-				if (hideOccludedDots && !_vertexVisible[i]
-					&& (selectedVerts == null || !selectedVerts.Contains(i))
-					&& i != _hoverVertexIndex)
+				bool isInteracting = (selectedVerts != null && selectedVerts.Contains(i))
+					|| i == _hoverVertexIndex
+					|| (primarySoftWeights != null && primarySoftWeights.ContainsKey(i))
+					|| (mirrorSoftWeights != null && mirrorSoftWeights.ContainsKey(i))
+					|| (brushAffected != null && brushAffected.ContainsKey(i))
+					|| (brushMirrorAffected != null && brushMirrorAffected.ContainsKey(i));
+				if (interactOnly && !isInteracting)
+					continue;
+				if (hideOccludedDots && !_vertexVisible[i] && !isInteracting)
 					continue;
 				Vector3 c = _wireVerts[i];
 				Color col;
@@ -1838,7 +1930,7 @@ namespace BlendShapeEditor
 		private static readonly Gradient WeightGradient = new Gradient();
 		private static readonly Gradient MirrorWeightGradient = new Gradient();
 		private bool _deferGizmoCentroidRefresh;
-		private const float DotPixelSize = 4f;
+		private static float DotPixelSize => BSE.VertexDotSize.Value;
 		private static readonly int SrcBlend = Shader.PropertyToID("_SrcBlend");
 		private static readonly int DstBlend = Shader.PropertyToID("_DstBlend");
 		private static readonly int Cull = Shader.PropertyToID("_Cull");

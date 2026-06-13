@@ -89,8 +89,14 @@ namespace BlendShapeEditor
         public static string SoftModeVolumeTooltipFmt;
         public static string SoftModeSurfaceTooltipFmt;
         public static string SoftSelectionRadiusFmt;
-        public static string CullBackVertices;
+        public static string VertexDisplayAll;
+        public static string VertexDisplayBackface;
+        public static string VertexDisplayInteract;
+        public static string VertexDisplayTooltip;
         public static string CullBackWireframe;
+        public static string WireframeCullOn;
+        public static string WireframeCullOff;
+        public static string WireframeCullTooltip;
 
         // Symmetry
         public static string Mirror;
@@ -112,6 +118,9 @@ namespace BlendShapeEditor
         // Bake
         public static string BakeHeader;
         public static string BakeNameLabel;
+        public static string BakePrefixLabel;
+        public static string BakeSeparateLabel;
+        public static string BakeSeparateTooltip;
         public static string BakeButton;
 
         // Help

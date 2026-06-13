@@ -53,8 +53,14 @@
   "SoftModeVolumeTooltipFmt": "Selección basada en volumen [{0}]",
   "SoftModeSurfaceTooltipFmt": "Selección basada en superficie [{0}]",
   "SoftSelectionRadiusFmt": "\"Radio\" de selección suave: {0:F3}",
-  "CullBackVertices": "Ocultar vértices traseros",
+  "VertexDisplayAll": "◀ Mostrar todos los vértices ▶",
+  "VertexDisplayBackface": "◀ Ocultar vértices traseros ▶",
+  "VertexDisplayInteract": "◀ Sólo en interacción ▶",
+  "VertexDisplayTooltip": "Alternar visualización de vértices: todos / sin traseros / sólo los que están en interacción",
   "CullBackWireframe": "Ocultar bordes traseros",
+  "WireframeCullOn": "◀ Ocultar bordes traseros ▶",
+  "WireframeCullOff": "◀ Mostrar bordes traseros ▶",
+  "WireframeCullTooltip": "Alternar ocultación de bordes traseros del wireframe",
 
   "Mirror": "Simetría",
   "SymmetryAxis": "Eje",
@@ -73,6 +79,9 @@
 
   "BakeHeader": "Bake a BlendShape",
   "BakeNameLabel": "\"Nombre\":",
+  "BakePrefixLabel": "\"Prefijo\":",
+  "BakeSeparateLabel": "Bake de capas como shapes separados",
+  "BakeSeparateTooltip": "Cuando está activado, cada capa se convierte en su propio blendshape llamado '{prefix}_{capa}', con el peso de la capa incorporado en sus deltas. Cuando está desactivado, todas las capas se combinan en un solo shape usando sus pesos actuales.",
   "BakeButton": "Salir y hacer Bake a BlendShape",
 
   "HelpRenderersHeader": "Renderers",

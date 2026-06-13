@@ -53,8 +53,14 @@
   "SoftModeVolumeTooltipFmt": "Volume based selection [{0}]",
   "SoftModeSurfaceTooltipFmt": "Surface based selection [{0}]",
   "SoftSelectionRadiusFmt": "Soft Selection Radius: {0:F3}",
-  "CullBackVertices": "Cull back-facing verts",
+  "VertexDisplayAll": "◀ Show all verts ▶",
+  "VertexDisplayBackface": "◀ Cull back-facing ▶",
+  "VertexDisplayInteract": "◀ Interacting only ▶",
+  "VertexDisplayTooltip": "Cycle vertex display: all / backface-culled / only verts being interacted with",
   "CullBackWireframe": "Cull back-facing edges",
+  "WireframeCullOn": "◀ Hide back-edges ▶",
+  "WireframeCullOff": "◀ Show back-edges ▶",
+  "WireframeCullTooltip": "Toggle culling of back-facing wireframe edges",
 
   "Mirror": "Symmetry",
   "SymmetryAxis": "Axis",
@@ -73,6 +79,9 @@
 
   "BakeHeader": "Bake to Blendshape",
   "BakeNameLabel": "Name:",
+  "BakePrefixLabel": "Prefix:",
+  "BakeSeparateLabel": "Bake layers as separate shapes",
+  "BakeSeparateTooltip": "When enabled, each layer becomes its own blendshape named '{prefix}_{layer}', with the layer's weight folded into its deltas. When disabled, all layers are combined into one shape using their current weights.",
   "BakeButton": "Exit and Bake to BlendShape",
 
   "HelpRenderersHeader": "Renderers",
