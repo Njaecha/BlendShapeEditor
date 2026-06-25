@@ -75,6 +75,9 @@
       <Reference Include="KK_MaterialEditor">
         <HintPath>..\..\AdditionalDependencies\KK_MaterialEditor-publicized.dll</HintPath>
       </Reference>
+      <Reference Include="KK_Stiletto">
+        <HintPath>..\..\AdditionalDependencies\KK_Stiletto-publicized.dll</HintPath>
+      </Reference>
       <Reference Include="LitJSON, Version=0.19.0.0, Culture=neutral, processorArchitecture=MSIL">
         <HintPath>..\packages\LitJson.0.19.0\lib\net35\LitJSON.dll</HintPath>
       </Reference>

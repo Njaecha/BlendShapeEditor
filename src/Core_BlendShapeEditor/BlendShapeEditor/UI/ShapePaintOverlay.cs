@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using BepInEx.Bootstrap;
 using HSPE;
 using KKAPI.Studio;
 using Studio;
@@ -209,8 +210,8 @@ namespace BlendShapeEditor
 				DoBake();
 			}
 		}
-
-		private Animator _animatorTurnedOff = null;
+		
+		// private Animator _animatorTurnedOff = null;
 		private void DoEnterEditMode()
 		{
 			if (Window.Renderers.Count == 0)
@@ -229,6 +230,8 @@ namespace BlendShapeEditor
 			}
 
 			renderer.TryGetOwningController(out Object controller);
+			// seems we actually don't need to disable the animator after all
+			/*
 			if (controller is BlendShapeEditorCharaController charaController)
 			{
 				Animator animator = charaController.ChaControl.animBody;
@@ -237,7 +240,13 @@ namespace BlendShapeEditor
 					_animatorTurnedOff = animator;
 					animator.enabled = false;
 				}
+
+				if (Chainloader.PluginInfos.ContainsKey(Stiletto.Stiletto.GUID))
+				{
+					StilettoBridge.StilettoHalt(charaController.ChaControl);
+				}
 			}
+			*/
 			
 			switch (renderer)
 			{
@@ -306,7 +315,7 @@ namespace BlendShapeEditor
 			if (!objectRoot)
 			{
 				// should not happen
-				BlendShapeEditorPlugin.Logger.LogError("ShapePaintOverlay.EnterEditMode() -> ObjectRoot is null");
+				BSE.Logger.LogError("ShapePaintOverlay.EnterEditMode() -> ObjectRoot is null");
 				return;
 			}
 			_gizmo.SetObjectRoot(objectRoot);
@@ -320,6 +329,7 @@ namespace BlendShapeEditor
 
 		internal void DoExitEditMode()
 		{
+			Renderer renderer = Window.SelectedRenderer;
 			if (_gizmo != null && _gizmo.IsDragging)
 				_gizmo.EndDrag();
 			_gizmo?.SetObjectRoot(null);
@@ -349,10 +359,19 @@ namespace BlendShapeEditor
 			StudioUndoBridge.ClearBSECommands();
 			_undoStack = null;
 			_isBrushing = false;
+			/*
 			if (_animatorTurnedOff)
 			{
 				_animatorTurnedOff.enabled = true;
 			}
+			renderer.TryGetOwningController(out Object controller);
+			if (controller is BlendShapeEditorCharaController charaController &&
+			    Chainloader.PluginInfos.ContainsKey(Stiletto.Stiletto.GUID) &&
+			    StilettoBridge.StilettoIsHalt(charaController.ChaControl))
+			{
+				StilettoBridge.StilettoResume(charaController.ChaControl);
+			}
+			*/
 		}
 
 		private void DoBake()
