@@ -24,6 +24,7 @@ namespace BlendShapeEditor
 		public Dictionary<int, float> MirrorSoftWeights => _mirrorWeights;
 		public bool HasMirrorTarget => _mirrorIndices != null && _mirrorIndices.Count > 0;
 		public HashSet<int> MirrorIndices => _mirrorIndices;
+		public HashSet<int> TargetIndices => _targetIndices;
 		public bool SymmetryEnabled { get; set; }
 		public int SymmetryAxis { get; set; }
 		public float SymmetryCenter { get; set; }

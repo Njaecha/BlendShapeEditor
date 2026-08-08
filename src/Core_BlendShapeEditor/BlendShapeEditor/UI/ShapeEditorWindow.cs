@@ -31,6 +31,7 @@ namespace BlendShapeEditor
 		public float GizmoSoftRadius { get; set; }
 		public float GizmoSizeFactor { get; set; }
 		public FalloffMode GizmoFalloff { get; set; }
+		public bool DeferSkinningDiagnostic { get; set; }
 		public bool CullBackWireframe { get; set; } = true;
 		public VertexDisplayType VertexDisplayMode = VertexDisplayType.BackfaceCulling;
 		public bool IsEditMode { get; private set; }
@@ -86,14 +87,17 @@ namespace BlendShapeEditor
 					_showHelp = !_showHelp;
 				
 				Color guic = GUI.color;
-				if (MatEditFilter) GUI.color = Color.magenta;
-				bool prevMef = MatEditFilter;
-				MatEditFilter = GUI.Toggle(new Rect(5,2,110,20),MatEditFilter, new GUIContent(i18n.MaterialEditorFilter, i18n.MaterialEditorFilterTooltip));
-				if (prevMef != MatEditFilter)
+				if (MaterialEditorBridge.BridgeAvailable) // only show ME-connect toggle if bridge is available
 				{
-					DeferRefreshRenderers = true;
+					if (MatEditFilter) GUI.color = Color.magenta;
+					bool prevMef = MatEditFilter;
+					MatEditFilter = GUI.Toggle(new Rect(5,2,110,20),MatEditFilter, new GUIContent(i18n.MaterialEditorFilter, i18n.MaterialEditorFilterTooltip));
+					if (prevMef != MatEditFilter)
+					{
+						DeferRefreshRenderers = true;
+					}
+					GUI.color = guic;
 				}
-				GUI.color = guic;
 				
 				GUILayout.Space(5f);
 
@@ -390,6 +394,12 @@ namespace BlendShapeEditor
 			}
 
 			DrawMirrorControls();
+
+			if (!BSE.ShowDebuggingControls.Value) return;
+			// section for debugging and diagnostics controls
+			if (GUILayout.Button(new GUIContent("Log Skinning Diagnostic",
+				    "Logs bone weights and the bind<->posed round-trip error for the currently selected vertices.")))
+				DeferSkinningDiagnostic = true;
 		}
 
 		private void DrawCullingToggles()
@@ -597,7 +607,7 @@ namespace BlendShapeEditor
 			if (IsEditMode && !_expandRendererPanel)
 			{
 				GUILayout.Space(5);
-				if (GUILayout.Button("▶ Expand renderer selection"))
+				if (GUILayout.Button(i18n.ExpandRendererPanel))
 				{
 					_expandRendererPanel = true;
 				}
@@ -609,20 +619,26 @@ namespace BlendShapeEditor
 			GUILayout.Label(i18n.TargetMesh);
 			if (IsEditMode)
 			{
-				if (GUILayout.Button("▼ Hide renderer selection"))
+				if (GUILayout.Button(i18n.CollapseRendererPanel))
 				{
 					_expandRendererPanel = false;
 				}
 			}
 			GUILayout.EndHorizontal();
+			GUILayout.BeginHorizontal();
 			_rendererFilter = GUILayout.TextField(_rendererFilter);
-
+			if (GUILayout.Button(new GUIContent(i18n.RefreshRenderers, i18n.RefreshRenderersTooltip), GUILayout.Width(70f)))
+			{
+				DeferRefreshRenderers = true;
+			}
+			GUILayout.EndHorizontal();
+			
 			bool filtering = !string.IsNullOrEmpty(_rendererFilter);
 			bool prev = GUI.enabled;
 			if (IsEditMode)
 				GUI.enabled = false;
 
-			_rendererScroll = GUILayout.BeginScrollView(_rendererScroll, "Box", GUILayout.Height(80f));
+			_rendererScroll = GUILayout.BeginScrollView(_rendererScroll, "Box", GUILayout.Height(IsEditMode ? 80f : Math.Max(80, _windowRect.height - 150f)));
 			for (var i = 0; i < Renderers.Count; i++)
 			{
 				if (!Renderers[i])

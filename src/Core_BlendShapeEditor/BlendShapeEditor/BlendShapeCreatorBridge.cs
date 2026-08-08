@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Studio;
 using UnityEngine;
 using CharacterController = BlendshapeCreator.CharacterController;
+using BSE = BlendShapeEditor.BlendShapeEditorPlugin;
 
 namespace BlendShapeEditor
 {
@@ -10,7 +11,7 @@ namespace BlendShapeEditor
 	{
 		// Studio: register a baked blendshape with an OCIItem's BSC data store
 		public static void RegisterBlendShapeStudio(ObjectCtrlInfo oci, string rendererPath, string shapeName,
-			Vector3[] deltaVerts, Vector3[] deltaNormals)
+			Vector3[] deltaVerts, Vector3[] deltaNormals, float weight)
 		{
 			if (oci == null) return;
 			try
@@ -21,7 +22,7 @@ namespace BlendShapeEditor
 					: null;
 
 				BlendshapeCreator.BlendshapeCreator.BlendShape shape = new BlendshapeCreator.BlendshapeCreator.BlendShape(
-					rendererPath, shapeName, deltaVertsStr, deltaNormalsStr, null);
+					rendererPath, shapeName, deltaVertsStr, deltaNormalsStr, null, weight);
 
 				Dictionary<ObjectCtrlInfo, BlendshapeCreator.BlendshapeCreator.OCIBlendShapeData> dataStore = BlendshapeCreator.BlendshapeCreator.ociBlendShapesData;
 				if (dataStore.TryGetValue(oci, out BlendshapeCreator.BlendshapeCreator.OCIBlendShapeData existing))
@@ -45,7 +46,7 @@ namespace BlendShapeEditor
 
 		// Maker: register a baked blendshape with a character's BSC controller
 		public static void RegisterBlendShapeMaker(ChaControl chaCtrl, string rendererPath, string shapeName,
-			Vector3[] deltaVerts, Vector3[] deltaNormals)
+			Vector3[] deltaVerts, Vector3[] deltaNormals, float weight)
 		{
 			if (!chaCtrl) return;
 			try
@@ -53,7 +54,7 @@ namespace BlendShapeEditor
 				CharacterController controller = chaCtrl.GetComponent<CharacterController>();
 				if (!controller)
 				{
-					BlendShapeEditorPlugin.Logger.LogWarning(
+					BSE.Logger.LogWarning(
 						"BlendShapeCreatorBridge: BlendshapeCreator CharacterController not found on character");
 					return;
 				}
@@ -64,15 +65,15 @@ namespace BlendShapeEditor
 					: null;
 
 				BlendshapeCreator.BlendshapeCreator.BlendShape shape = new BlendshapeCreator.BlendshapeCreator.BlendShape(
-					rendererPath, shapeName, deltaVertsStr, deltaNormalsStr, null);
+					rendererPath, shapeName, deltaVertsStr, deltaNormalsStr, null, weight);
 
 				controller.CharaBlendShapesData.blendShapes.Add(shape);
-				BlendShapeEditorPlugin.Logger.LogInfo(
+				BSE.Logger.LogInfo(
 					$"BlendShapeCreatorBridge: registered '{shapeName}' on character '{chaCtrl.name}'");
 			}
 			catch (System.Exception ex)
 			{
-				BlendShapeEditorPlugin.Logger.LogWarning("BlendShapeCreatorBridge.RegisterBlendShapeMaker error: " + ex.Message);
+				BSE.Logger.LogWarning("BlendShapeCreatorBridge.RegisterBlendShapeMaker error: " + ex.Message);
 			}
 		}
 	}

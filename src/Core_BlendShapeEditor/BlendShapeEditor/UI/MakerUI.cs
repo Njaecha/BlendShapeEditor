@@ -51,6 +51,8 @@ namespace BlendShapeEditor
 			if (!chaCtrl)
 				return;
 
+			Window.Renderers.Clear();
+			
 			if (_window.MatEditFilter)
 			{
 				MaterialEditorBridge.CurrentlyVisibleRenderers.ForEach(rend =>  _window.Renderers.Add(rend));

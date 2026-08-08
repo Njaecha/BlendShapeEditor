@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
@@ -7,8 +9,12 @@ using Illusion.Component.UI;
 using KK_Plugins.MaterialEditor;
 using KKAPI.Chara;
 using KKAPI.Maker;
+using KKAPI.Maker.UI.Sidebar;
 using KKAPI.Studio;
 using KKAPI.Studio.SaveLoad;
+using StrayTech;
+using Studio;
+using UniRx;
 using UnityEngine;
 
 namespace BlendShapeEditor
@@ -21,12 +27,13 @@ namespace BlendShapeEditor
     {
         public const string GUID = "org.njaecha.plugins.blendshapeeditor";
         public const string PluginName = "BlendShapeEditor";
-        public const string Version = "0.3.2";
+        public const string Version = "0.4.0";
 
         internal new static ManualLogSource Logger;
         public static BlendShapeEditorPlugin Instance;
 
-
+        public static ConfigEntry<bool> ShowDebuggingControls { get; private set; }
+        
         public static ConfigEntry<float> DefaultBrushRadius { get; private set; }
         public static ConfigEntry<float> BrushRadiusScrollMod { get; private set; }
         public static ConfigEntry<float> DefaultBrushStrength { get; private set; }
@@ -97,12 +104,17 @@ namespace BlendShapeEditor
         public static ConfigEntry<KeyboardShortcut> KeyGizmoCycleSoftMode { get; private set; }
 
         #endregion
+        
+        internal SidebarToggle SidebarToggle;
 
         private void Awake()
         {
             Instance = this;
             Logger = base.Logger;
 
+            ShowDebuggingControls = Config.Bind("Debug", "Show", false,
+                "Shows extra controls and buttons for debugging and diagnostics purposes.");
+            
             #region Colors
 
             BrushColorMove = Config.Bind("Colors - Brush", "Move", Color.yellow, "Color for the brush in Move mode");
@@ -297,13 +309,36 @@ namespace BlendShapeEditor
             i18n.SetLanguage(UILanguage.Value);
             UILanguage.SettingChanged += (s, e) => i18n.SetLanguage(UILanguage.Value);
 
-            Harmony.CreateAndPatchAll(typeof(Hooks), GUID);
+            try
+            {
+                Harmony.CreateAndPatchAll(typeof(MaterialEditorBridge.Hooks), GUID);
+                MaterialEditorBridge.BridgeAvailable = true;
+            }
+            catch (Exception)
+            {
+                // ME Hook was not successfully injected. ME-Bridge should be unavailable.
+                MaterialEditorBridge.BridgeAvailable = false;
+            }
 
             CharacterApi.RegisterExtraBehaviour<BlendShapeEditorCharaController>(GUID);
             StudioSaveLoadApi.RegisterExtraBehaviour<BlendShapeEditorSceneController>(GUID);
 
             StudioAPI.StudioLoadedChanged += (s, e) => StudioUI.Init();
             MakerUI.Init();
+            
+            MakerAPI.RegisterCustomSubCategories += (sender, e) =>
+            {
+                SidebarToggle = new SidebarToggle("Blendshape Editor", false, this);
+                e.AddSidebarControl(SidebarToggle).ValueChanged.Subscribe(b =>
+                {
+                    ShapeEditorWindow window = MakerUI.Overlay?.Window;
+                    if (window != null) window.Visible = SidebarToggle.Value;
+                });
+            };
+            MakerAPI.MakerExiting += (sender, e) =>
+            {
+                SidebarToggle = null;
+            };
         }
     }
 }

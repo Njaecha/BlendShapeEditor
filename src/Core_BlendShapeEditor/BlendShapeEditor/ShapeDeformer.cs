@@ -97,14 +97,7 @@ namespace BlendShapeEditor
 			else
 			{
 				ClearCPUSkinningData();
-				if (!meshNotReadable && smr.sharedMesh)
-				{
-					_boneWeights = smr.sharedMesh.boneWeights;
-					_bindPoses = smr.sharedMesh.bindposes;
-					_smrBones = smr.bones;
-					if (_smrBones != null && _smrBones.Length != 0)
-						_boneMatrices = new Matrix4x4[_smrBones.Length];
-				}
+				AcquireSkinningData(smr, meshNotReadable);
 			}
 
 			CreateDisplayGO(smr, false);
@@ -521,6 +514,103 @@ namespace BlendShapeEditor
 			}
 		}
 
+		/// Populates the bone data used to convert deltas between bind space and the current pose.
+		/// bindposes and smr.bones are always accessible; only boneWeights is gated by isReadable,
+		/// so for a non-readable mesh we recover the weights via GetAllBoneWeights (KKS/Unity 2019+).
+		/// Without this the deltas are stored in posed space and the bake silently comes out wrong.
+		private void AcquireSkinningData(SkinnedMeshRenderer smr, bool meshNotReadable)
+		{
+			Mesh mesh = smr.sharedMesh;
+			if (!mesh)
+				return;
+
+			_bindPoses = mesh.bindposes;
+			_smrBones = smr.bones;
+
+			_boneWeights = meshNotReadable ? ReadBoneWeightsUnreadable(mesh) : mesh.boneWeights;
+
+			if (_boneWeights == null || _boneWeights.Length != mesh.vertexCount)
+			{
+				// No usable weights: every skinning-aware path falls back to treating deltas as
+				// posed-space vectors, which bakes incorrectly. Make that loud rather than silent.
+				_boneWeights = null;
+				_bindPoses = null;
+				_smrBones = null;
+				_boneMatrices = null;
+				BSE.Logger.LogWarning(
+					$"ShapeDeformer: could not obtain bone weights for '{mesh.name}' - deltas cannot be converted to " +
+					"bind space and baking to a blendshape will be inaccurate in poses away from the bind pose.");
+				return;
+			}
+
+			if (_smrBones != null && _smrBones.Length != 0)
+				_boneMatrices = new Matrix4x4[_smrBones.Length];
+
+			if (meshNotReadable)
+				BSE.Logger.LogInfo($"ShapeDeformer: recovered bone weights for non-readable mesh '{mesh.name}'");
+		}
+
+		/// Reads bone weights from a mesh whose isReadable flag is false.
+		private static BoneWeight[] ReadBoneWeightsUnreadable(Mesh mesh)
+		{
+#if KKS
+			try
+			{
+				// GetAllBoneWeights returns a flat, vertex-major stream; bonesPerVertex says how
+				// many entries belong to each vertex. Unity's legacy BoneWeight holds at most 4,
+				// so extra influences are dropped and the kept ones renormalized.
+				Unity.Collections.NativeArray<byte> bonesPerVertex = mesh.GetBonesPerVertex();
+				Unity.Collections.NativeArray<BoneWeight1> allWeights = mesh.GetAllBoneWeights();
+				if (bonesPerVertex.Length == 0 || allWeights.Length == 0)
+					return null;
+
+				var result = new BoneWeight[bonesPerVertex.Length];
+				var cursor = 0;
+				for (var v = 0; v < bonesPerVertex.Length; v++)
+				{
+					int influences = bonesPerVertex[v];
+					var bw = new BoneWeight();
+					// GetAllBoneWeights is sorted by descending weight per vertex, so the first
+					// four are the most significant.
+					int kept = Mathf.Min(influences, 4);
+					var sum = 0f;
+					for (var i = 0; i < kept; i++)
+					{
+						BoneWeight1 w = allWeights[cursor + i];
+						switch (i)
+						{
+							case 0: bw.boneIndex0 = w.boneIndex; bw.weight0 = w.weight; break;
+							case 1: bw.boneIndex1 = w.boneIndex; bw.weight1 = w.weight; break;
+							case 2: bw.boneIndex2 = w.boneIndex; bw.weight2 = w.weight; break;
+							case 3: bw.boneIndex3 = w.boneIndex; bw.weight3 = w.weight; break;
+						}
+						sum += w.weight;
+					}
+					// Renormalize so dropped influences don't shrink the delta.
+					if (sum > 1E-06f && Mathf.Abs(sum - 1f) > 1E-06f)
+					{
+						bw.weight0 /= sum;
+						bw.weight1 /= sum;
+						bw.weight2 /= sum;
+						bw.weight3 /= sum;
+					}
+					result[v] = bw;
+					cursor += influences;
+				}
+				return result;
+			}
+			catch (Exception ex)
+			{
+				BSE.Logger.LogWarning("ShapeDeformer.ReadBoneWeightsUnreadable failed: " + ex.Message);
+				return null;
+			}
+#else
+			// KK targets Unity 5.6, which has neither GetAllBoneWeights nor BoneWeight1.
+			// No non-readable meshes have been observed on that target.
+			return null;
+#endif
+		}
+
 		private void ComputeBoneMatrices()
 		{
 			if (_smrBones == null || _bindPoses == null || _boneMatrices == null)
@@ -593,12 +683,12 @@ namespace BlendShapeEditor
 		{
 			if (_boneWeights == null || _boneMatrices == null)
 			{
-				BlendShapeEditorPlugin.Logger.LogInfo($"[Diag] v={vertexIdx}: no bone data (static / non-readable)");
+				BSE.Logger.LogInfo($"[Diag] v={vertexIdx}: no bone data (static / non-readable)");
 				return;
 			}
 			if (vertexIdx < 0 || vertexIdx >= _boneWeights.Length)
 			{
-				BlendShapeEditorPlugin.Logger.LogInfo($"[Diag] v={vertexIdx}: out of range ({_boneWeights.Length})");
+				BSE.Logger.LogInfo($"[Diag] v={vertexIdx}: out of range ({_boneWeights.Length})");
 				return;
 			}
 
@@ -612,23 +702,36 @@ namespace BlendShapeEditor
 			Vector3 boneX = M.MultiplyVector(Vector3.right);
 			Vector3 boneY = M.MultiplyVector(Vector3.up);
 			Vector3 boneZ = M.MultiplyVector(Vector3.forward);
-			Vector3 localDisp = xform ? xform.InverseTransformVector(worldDispSample) : worldDispSample;
-			Vector3 appliedDisp = M.MultiplyVector(localDisp);
-			float dispLen = localDisp.magnitude;
-			float scaleRatio = dispLen > 1E-06f ? appliedDisp.magnitude / dispLen : 0f;
-			float angleDeg = Vector3.Angle(appliedDisp, localDisp);
+			Vector3 localDisp = StudioMode ? worldDispSample : (xform ? xform.InverseTransformVector(worldDispSample) : worldDispSample);
 
-			BlendShapeEditorPlugin.Logger.LogInfo(string.Concat(new[]
+			// The round-trip that actually matters: what the editor stores (M.inverse) vs what
+			// Unity/ApplySkinnedDeltas replays on top of it (sum of w*M). If these disagree, the
+			// baked blendshape will not match what was previewed.
+			WorldDeltaToBindDelta(vertexIdx, worldDispSample, out Vector3 storedBindDelta);
+			Vector3 replayed = Vector3.zero;
+			AccumulateSkinnedVector(ref replayed, bw.boneIndex0, bw.weight0, storedBindDelta);
+			AccumulateSkinnedVector(ref replayed, bw.boneIndex1, bw.weight1, storedBindDelta);
+			AccumulateSkinnedVector(ref replayed, bw.boneIndex2, bw.weight2, storedBindDelta);
+			AccumulateSkinnedVector(ref replayed, bw.boneIndex3, bw.weight3, storedBindDelta);
+
+			float dispLen = localDisp.magnitude;
+			float scaleRatio = dispLen > 1E-06f ? replayed.magnitude / dispLen : 0f;
+			float angleDeg = Vector3.Angle(replayed, localDisp);
+			float weightSum = bw.weight0 + bw.weight1 + bw.weight2 + bw.weight3;
+			Vector3 residual = replayed - localDisp;
+
+			BSE.Logger.LogInfo(string.Concat(new[]
 			{
 				$"[Diag] v={vertexIdx} renderer={(_smr != null ? _smr.name : "?")} studio={StudioMode}\n",
-				$"  bones: {BoneName(bw.boneIndex0)}({bw.weight0:F2}) {BoneName(bw.boneIndex1)}({bw.weight1:F2}) {BoneName(bw.boneIndex2)}({bw.weight2:F2}) {BoneName(bw.boneIndex3)}({bw.weight3:F2})\n",
+				$"  bones: {BoneName(bw.boneIndex0)}({bw.weight0:F2}) {BoneName(bw.boneIndex1)}({bw.weight1:F2}) {BoneName(bw.boneIndex2)}({bw.weight2:F2}) {BoneName(bw.boneIndex3)}({bw.weight3:F2}) sum={weightSum:F4}\n",
 				$"  M*X={boneX} len={boneX.magnitude:F3}\n",
 				$"  M*Y={boneY} len={boneY.magnitude:F3}\n",
 				$"  M*Z={boneZ} len={boneZ.magnitude:F3}\n",
 				$"  worldDisp={worldDispSample} len={worldDispSample.magnitude:F4}\n",
-				$"  storedDelta(smrLocal)={localDisp} len={dispLen:F4}\n",
-				$"  applied(M*delta)={appliedDisp} len={appliedDisp.magnitude:F4}\n",
-				$"  applied/stored: ratio={scaleRatio:F3} angleDeg={angleDeg:F1}"
+				$"  wanted(smrLocal)={localDisp} len={dispLen:F4}\n",
+				$"  storedBindDelta={storedBindDelta} len={storedBindDelta.magnitude:F4}\n",
+				$"  replayed(sum w*M*stored)={replayed} len={replayed.magnitude:F4}\n",
+				$"  ROUNDTRIP: ratio={scaleRatio:F4} angleDeg={angleDeg:F2} residualLen={residual.magnitude:F6}"
 			}));
 		}
 
@@ -637,6 +740,15 @@ namespace BlendShapeEditor
 			if (_smrBones == null || boneIdx < 0 || boneIdx >= _smrBones.Length)
 				return "?";
 			return _smrBones[boneIdx] ? _smrBones[boneIdx].name : "?";
+		}
+
+		/// Mirrors one term of ApplySkinnedDeltas so the diagnostic replays exactly what the
+		/// forward path (and Unity's blendshape skinning) will do to a stored bind-space delta.
+		private void AccumulateSkinnedVector(ref Vector3 acc, int boneIdx, float w, Vector3 v)
+		{
+			if (w <= 0f || _boneMatrices == null || boneIdx < 0 || boneIdx >= _boneMatrices.Length)
+				return;
+			acc += _boneMatrices[boneIdx].MultiplyVector(v) * w;
 		}
 
 		private void AccumulateBoneMatrix(ref Matrix4x4 M, int boneIdx, float w)
@@ -843,7 +955,7 @@ namespace BlendShapeEditor
 
 			if (DeformData == null || !DeformData.HasLayers)
 			{
-				BlendShapeEditorPlugin.Logger.LogWarning("BakeToBlendShape: no layers to bake");
+				BSE.Logger.LogWarning("BakeToBlendShape: no layers to bake");
 				return -1;
 			}
 
@@ -858,17 +970,20 @@ namespace BlendShapeEditor
 
 			if (!_smr || !_smr.sharedMesh)
 			{
-				BlendShapeEditorPlugin.Logger.LogWarning("BakeToBlendShape: no SMR or mesh");
+				BSE.Logger.LogWarning("BakeToBlendShape: no SMR or mesh");
 				return -1;
 			}
 
 			Mesh mesh = _smr.sharedMesh;
+			// A non-readable mesh returns empty geometry arrays, so fall back to vertexCount
+			// (always valid) rather than reporting a bogus length mismatch.
 			Vector3[] bindVerts = mesh.vertices;
-			int vertCount = bindVerts.Length;
+			int vertCount = bindVerts != null && bindVerts.Length != 0 ? bindVerts.Length : mesh.vertexCount;
 
 			if (delta == null || delta.Length != vertCount)
 			{
-				BlendShapeEditorPlugin.Logger.LogWarning("BakeToBlendShape: delta length mismatch");
+				BSE.Logger.LogWarning(
+					$"BakeToBlendShape: delta length mismatch (delta={delta?.Length ?? 0}, verts={vertCount})");
 				return -1;
 			}
 
@@ -878,12 +993,18 @@ namespace BlendShapeEditor
 			{
 				Vector3[] bindNormals = mesh.normals;
 				int[] triangles = mesh.triangles;
-				outDeltaNormals = MeshHelper.ComputePartialDeltaNormals(bindVerts, bindNormals, delta, triangles);
+				// ComputePartialDeltaNormals needs real geometry; skip it when the mesh is
+				// non-readable rather than feeding it empty arrays.
+				if (bindVerts != null && bindVerts.Length == vertCount && triangles != null && triangles.Length != 0)
+					outDeltaNormals = MeshHelper.ComputePartialDeltaNormals(bindVerts, bindNormals, delta, triangles);
+				else
+					BSE.Logger.LogInfo(
+						$"BakeToBlendShape: '{mesh.name}' has no readable geometry, baking without delta normals");
 			}
 
 			mesh.AddBlendShapeFrame(shapeName, 100f, delta, outDeltaNormals, null);
 			int idx = mesh.GetBlendShapeIndex(shapeName);
-			BlendShapeEditorPlugin.Logger.LogInfo($"BakeToBlendShape: baked '{shapeName}' as blendshape index {idx}");
+			BSE.Logger.LogInfo($"BakeToBlendShape: baked '{shapeName}' as blendshape index {idx}");
 			#if KK
 			BlendShapeEditorPlugin.Logger.LogInfo($"Fixing stuck blendshape '{shapeName}' on {_smr.name}");
 			Mesh actualMesh = _smr.sharedMesh;

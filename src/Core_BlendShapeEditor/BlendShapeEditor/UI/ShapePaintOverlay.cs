@@ -410,7 +410,7 @@ namespace BlendShapeEditor
 						continue;
 					}
 					smr.SetBlendShapeWeight(bsIndex, 100f);
-					if (!RegisterBakedShape(smr, shapeName, deltaVerts, deltaNormals))
+					if (!RegisterBakedShape(smr, shapeName, deltaVerts, deltaNormals, 100f))
 						return;
 				}
 			}
@@ -420,7 +420,7 @@ namespace BlendShapeEditor
 				if (bsIndex < 0)
 					return;
 				smr.SetBlendShapeWeight(bsIndex, 100f);
-				if (!RegisterBakedShape(smr, prefix, deltaVerts, deltaNormals))
+				if (!RegisterBakedShape(smr, prefix, deltaVerts, deltaNormals, 100f))
 					return;
 				Window.IncrementBakeShapeName();
 			}
@@ -429,7 +429,7 @@ namespace BlendShapeEditor
 			DoExitEditMode();
 		}
 
-		private bool RegisterBakedShape(SkinnedMeshRenderer smr, string shapeName, Vector3[] deltaVerts, Vector3[] deltaNormals)
+		private bool RegisterBakedShape(SkinnedMeshRenderer smr, string shapeName, Vector3[] deltaVerts, Vector3[] deltaNormals, float weight)
 		{
 			if (!_deformer.TryGetOwningController(out Object controller))
 			{
@@ -442,14 +442,14 @@ namespace BlendShapeEditor
 				case BlendShapeEditorItemController itemCtrl:
 				{
 					string path = itemCtrl.RootTransform.GetPathToChild(smr.transform);
-					BlendShapeCreatorBridge.RegisterBlendShapeStudio(itemCtrl.ItemCtrlInfo, path, shapeName, deltaVerts, deltaNormals);
+					BlendShapeCreatorBridge.RegisterBlendShapeStudio(itemCtrl.ItemCtrlInfo, path, shapeName, deltaVerts, deltaNormals, weight);
 					RefreshPoseController(itemCtrl.gameObject);
 					return true;
 				}
 				case BlendShapeEditorCharaController charCtrl:
 				{
 					string path = charCtrl.RootTransform.GetPathToChild(smr.transform);
-					BlendShapeCreatorBridge.RegisterBlendShapeMaker(charCtrl.ChaControl, path, shapeName, deltaVerts, deltaNormals);
+					BlendShapeCreatorBridge.RegisterBlendShapeMaker(charCtrl.ChaControl, path, shapeName, deltaVerts, deltaNormals, weight);
 					RefreshPoseController(charCtrl.gameObject);
 					return true;
 				}
@@ -545,6 +545,46 @@ namespace BlendShapeEditor
 			}
 		}
 
+		/// Logs the bind<->posed skinning round-trip for the currently selected vertices.
+		/// Probes along the three renderer-local axes so a rotation/scale error shows up
+		/// regardless of which direction the vertex was actually dragged.
+		private void RunSkinningDiagnostic(Transform targetTransform)
+		{
+			if (!_deformer)
+			{
+				BlendShapeEditorPlugin.Logger.LogWarning("[Diag] no deformer on target renderer");
+				return;
+			}
+			if (_gizmo == null || !_gizmo.HasTarget)
+			{
+				BlendShapeEditorPlugin.Logger.LogWarning("[Diag] no vertices selected - select a vertex in Gizmo mode first");
+				return;
+			}
+
+			// Probe magnitude in world units; small enough to stay in the linear regime.
+			const float probe = 0.01f;
+			var axes = new[] { Vector3.right, Vector3.up, Vector3.forward };
+
+			var logged = 0;
+			foreach (int idx in _gizmo.TargetIndices)
+			{
+				if (logged >= MaxDiagnosticVerts)
+				{
+					BlendShapeEditorPlugin.Logger.LogInfo(
+						$"[Diag] ...{_gizmo.TargetIndices.Count - MaxDiagnosticVerts} more selected vertices not logged");
+					break;
+				}
+				foreach (Vector3 axis in axes)
+				{
+					Vector3 worldDisp = (targetTransform ? targetTransform.TransformDirection(axis) : axis) * probe;
+					_deformer.LogSkinningDiagnostic(idx, worldDisp, targetTransform);
+				}
+				logged++;
+			}
+		}
+
+		private const int MaxDiagnosticVerts = 4;
+
 		private void LateUpdate()
 		{
 			if (!_targetRenderer || SelectionTool == null)
@@ -612,6 +652,12 @@ namespace BlendShapeEditor
 				// UpdateHover runs every frame for handle highlight rendering
 				Transform targetTransform = SelectionTool.TargetTransform;
 				_gizmo.UpdateHover(InputHelper.MousePosition, main, targetTransform);
+
+				if (Window.DeferSkinningDiagnostic)
+				{
+					Window.DeferSkinningDiagnostic = false;
+					RunSkinningDiagnostic(targetTransform);
+				}
 			}
 			bool prevSymEnabled = _symmetryEnabled;
 			int prevSymAxis = _symmetryAxis;
@@ -1285,9 +1331,9 @@ namespace BlendShapeEditor
 			if (!Window.IsEditMode)
 				return;
 			bool hasWire = _wireVerts != null && _wireTris != null;
+			if (!hasWire && !_hasHit) return;
 			if (hasWire) DrawWireframe();
-			if (!hasWire && !_hasHit)
-				return;
+			if (Window.ActiveDeformData == null || Window.ActiveDeformData.Layers.IsNullOrEmpty()) return;
 			_cursorMaterial.SetPass(0);
 			GL.PushMatrix();
 			GL.MultMatrix(Matrix4x4.identity);
