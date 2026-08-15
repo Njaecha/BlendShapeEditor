@@ -403,23 +403,19 @@ namespace BlendShapeEditor
 							scaled[i] = layer.Deltas[i] * layer.Weight;
 					}
 					var shapeName = $"{prefix}_{layer.Name}";
-					int bsIndex = _deformer.BakeToBlendShape(shapeName, scaled, out Vector3[] deltaVerts, out Vector3[] deltaNormals);
-					if (bsIndex < 0)
+					if (!_deformer.BakeToBlendShape(shapeName, scaled, out Vector3[] deltaVerts, out Vector3[] deltaNormals))
 					{
 						BSE.Logger.LogWarning($"DoBake: skipping layer '{layer.Name}' — bake failed");
 						continue;
 					}
-					smr.SetBlendShapeWeight(bsIndex, 100f);
 					if (!RegisterBakedShape(smr, shapeName, deltaVerts, deltaNormals, 100f))
 						return;
 				}
 			}
 			else
 			{
-				int bsIndex = _deformer.BakeToBlendShape(prefix, out Vector3[] deltaVerts, out Vector3[] deltaNormals);
-				if (bsIndex < 0)
+				if (!_deformer.BakeToBlendShape(prefix, out Vector3[] deltaVerts, out Vector3[] deltaNormals))
 					return;
-				smr.SetBlendShapeWeight(bsIndex, 100f);
 				if (!RegisterBakedShape(smr, prefix, deltaVerts, deltaNormals, 100f))
 					return;
 				Window.IncrementBakeShapeName();
@@ -441,15 +437,13 @@ namespace BlendShapeEditor
 			{
 				case BlendShapeEditorItemController itemCtrl:
 				{
-					string path = itemCtrl.RootTransform.GetPathToChild(smr.transform);
-					BlendShapeCreatorBridge.RegisterBlendShapeStudio(itemCtrl.ItemCtrlInfo, path, shapeName, deltaVerts, deltaNormals, weight);
+					BlendShapeCreatorBridge.RegisterBlendShapeStudio(itemCtrl.ItemCtrlInfo, smr, shapeName, deltaVerts, deltaNormals, weight);
 					RefreshPoseController(itemCtrl.gameObject);
 					return true;
 				}
 				case BlendShapeEditorCharaController charCtrl:
 				{
-					string path = charCtrl.RootTransform.GetPathToChild(smr.transform);
-					BlendShapeCreatorBridge.RegisterBlendShapeMaker(charCtrl.ChaControl, path, shapeName, deltaVerts, deltaNormals, weight);
+					BlendShapeCreatorBridge.RegisterBlendShapeMaker(charCtrl.ChaControl, smr, shapeName, deltaVerts, deltaNormals, weight);
 					RefreshPoseController(charCtrl.gameObject);
 					return true;
 				}

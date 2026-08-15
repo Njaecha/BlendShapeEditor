@@ -947,7 +947,7 @@ namespace BlendShapeEditor
 		/// Returns the blendshape index, or -1 on failure.
 		/// Also returns the delta arrays used for BSC registration.
 		/// </summary>
-		public int BakeToBlendShape(string shapeName, out Vector3[] outDeltaVerts, out Vector3[] outDeltaNormals,
+		public bool BakeToBlendShape(string shapeName, out Vector3[] outDeltaVerts, out Vector3[] outDeltaNormals,
 			bool computeDeltaNormals = true)
 		{
 			outDeltaVerts = null;
@@ -956,13 +956,14 @@ namespace BlendShapeEditor
 			if (DeformData == null || !DeformData.HasLayers)
 			{
 				BSE.Logger.LogWarning("BakeToBlendShape: no layers to bake");
-				return -1;
+				return false;
 			}
 
-			return BakeToBlendShape(shapeName, DeformData.ComputeFinalDelta(), out outDeltaVerts, out outDeltaNormals, computeDeltaNormals);
+			BakeToBlendShape(shapeName, DeformData.ComputeFinalDelta(), out outDeltaVerts, out outDeltaNormals, computeDeltaNormals);
+			return true;
 		}
 
-		public int BakeToBlendShape(string shapeName, Vector3[] delta, out Vector3[] outDeltaVerts, out Vector3[] outDeltaNormals,
+		public bool BakeToBlendShape(string shapeName, Vector3[] delta, out Vector3[] outDeltaVerts, out Vector3[] outDeltaNormals,
 			bool computeDeltaNormals = true)
 		{
 			outDeltaVerts = null;
@@ -971,7 +972,7 @@ namespace BlendShapeEditor
 			if (!_smr || !_smr.sharedMesh)
 			{
 				BSE.Logger.LogWarning("BakeToBlendShape: no SMR or mesh");
-				return -1;
+				return false;
 			}
 
 			Mesh mesh = _smr.sharedMesh;
@@ -984,7 +985,7 @@ namespace BlendShapeEditor
 			{
 				BSE.Logger.LogWarning(
 					$"BakeToBlendShape: delta length mismatch (delta={delta?.Length ?? 0}, verts={vertCount})");
-				return -1;
+				return false;
 			}
 
 			outDeltaVerts = delta;
@@ -1002,16 +1003,8 @@ namespace BlendShapeEditor
 						$"BakeToBlendShape: '{mesh.name}' has no readable geometry, baking without delta normals");
 			}
 
-			mesh.AddBlendShapeFrame(shapeName, 100f, delta, outDeltaNormals, null);
-			int idx = mesh.GetBlendShapeIndex(shapeName);
-			BSE.Logger.LogInfo($"BakeToBlendShape: baked '{shapeName}' as blendshape index {idx}");
-			#if KK
-			BlendShapeEditorPlugin.Logger.LogInfo($"Fixing stuck blendshape '{shapeName}' on {_smr.name}");
-			Mesh actualMesh = _smr.sharedMesh;
-			_smr.sharedMesh = null; // reset mesh to force SMR to recache mesh data
-			_smr.sharedMesh = actualMesh;
-			#endif
-			return idx;
+			BSE.Logger.LogInfo($"BakeToBlendShape: baked '{shapeName}' to blendshape deltas");
+			return true;
 		}
 
 		public Action OnDeformationApplied;
