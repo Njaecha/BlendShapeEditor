@@ -791,7 +791,7 @@ namespace BlendShapeEditor
 				// Pass 2: edge cull using the cached per-triangle facing.
 				// Skip culling entirely when the user has turned wireframe culling off.
 				int edgeCount = _edges.Length;
-				bool cullWire = Window == null || Window.CullBackWireframe;
+				bool cullWire = Window == null || Window.WireframeDisplayMode == ShapeEditorWindow.WireframeDisplayType.BackfaceCulling;
 				var writeIdx = 0;
 				if (cullWire)
 				{
@@ -843,7 +843,7 @@ namespace BlendShapeEditor
 			// Both Input.MousePosition and WorldToScreenPoint use screen space (Y=0 at bottom) — compare directly
 			float bestDistSq = DotPixelSize * DotPixelSize * 4f; // search radius = 2× dot size in pixels
 			int bestIdx = -1;
-			bool restrictToVisible = Window != null && Window.CullBackWireframe
+			bool restrictToVisible = Window != null && Window.WireframeDisplayMode == ShapeEditorWindow.WireframeDisplayType.BackfaceCulling
 				&& _vertexVisible != null && _vertexVisible.Length == _wireVerts.Length;
 			for (var i = 0; i < _wireVerts.Length; i++)
 			{
@@ -1287,7 +1287,7 @@ namespace BlendShapeEditor
 				float screenYMin = Screen.height - yMax;
 				float screenYMax = Screen.height - yMin;
 				Rect screenRect = new Rect(xMin, screenYMin, xMax - xMin, screenYMax - screenYMin);
-				bool[] visMask = (Window != null && Window.CullBackWireframe) ? _vertexVisible : null;
+				bool[] visMask = (Window != null && Window.WireframeDisplayMode == ShapeEditorWindow.WireframeDisplayType.BackfaceCulling) ? _vertexVisible : null;
 				if ((mods & EventModifiers.Control) != 0)
 					SelectionTool.DeselectBox(cam, screenRect, visMask);
 				else
@@ -1564,13 +1564,15 @@ namespace BlendShapeEditor
 			HashSet<int> mirrorVerts = inGizmoMode && _symmetryEnabled && _gizmo != null && _gizmo.HasMirrorTarget ? _gizmo.MirrorIndices : null;
 			bool hasSelection = selectedVerts != null && selectedVerts.Count > 0;
 			bool hasMirror = mirrorVerts != null && mirrorVerts.Count > 0;
-			if (_wireColorsDirty || useSoftColors != _prevUseSoftColors || useBrushColors != _prevUseBrushColors || hasMirror != _prevHasMirror || _wireColors == null || _wireColors.Length != _wireVerts.Length)
+			ShapeEditorWindow.WireframeDisplayType wireDisplayMode = Window.WireframeDisplayMode;
+			if (_wireColorsDirty || useSoftColors != _prevUseSoftColors || useBrushColors != _prevUseBrushColors || hasMirror != _prevHasMirror || wireDisplayMode != _prevWireframeDisplayMode || _wireColors == null || _wireColors.Length != _wireVerts.Length)
 			{
 				RebuildWireColors(useSoftColors, useBrushColors, hasSelection ? selectedVerts : null, hasMirror ? mirrorVerts : null);
 				_wireColorsDirty = false;
 				_prevUseSoftColors = useSoftColors;
 				_prevUseBrushColors = useBrushColors;
 				_prevHasMirror = hasMirror;
+				_prevWireframeDisplayMode = wireDisplayMode;
 			}
 			// Cull results were computed in LateUpdate; use them directly
 			int writeIdx = _culledVisibleCount;
@@ -1598,6 +1600,8 @@ namespace BlendShapeEditor
 			if (_wireColors == null || _wireColors.Length != count)
 				_wireColors = new Color32[count];
 			Color32 defCol = BSE.WireColorDefault.Value;
+			if (Window != null && Window.WireframeDisplayMode == ShapeEditorWindow.WireframeDisplayType.Interact)
+				defCol.a = 0;
 			if (useSoftColors)
 			{
 				Dictionary<int, float> primary = _gizmo.PrimarySoftWeights;
@@ -2051,6 +2055,7 @@ namespace BlendShapeEditor
 		private bool _prevUseSoftColors;
 		private bool _prevUseBrushColors;
 		private bool _prevHasMirror;
+		private ShapeEditorWindow.WireframeDisplayType _prevWireframeDisplayMode;
 		// Cull results computed in LateUpdate, consumed in OnRenderObject
 		private int _culledVisibleCount;
 		// Hover vertex detection

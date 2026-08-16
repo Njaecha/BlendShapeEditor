@@ -33,7 +33,7 @@ namespace BlendShapeEditor
 		public float GizmoSizeFactor { get; set; }
 		public FalloffMode GizmoFalloff { get; set; }
 		public bool DeferSkinningDiagnostic { get; set; }
-		public bool CullBackWireframe { get; set; } = true;
+		public WireframeDisplayType WireframeDisplayMode { get; set; } = WireframeDisplayType.BackfaceCulling;
 		public VertexDisplayType VertexDisplayMode = VertexDisplayType.BackfaceCulling;
 		public bool IsEditMode { get; private set; }
 		public float PreviewWeight { get; set; } = 1f;
@@ -238,7 +238,7 @@ namespace BlendShapeEditor
 			if (!hasLayers) return;
 			GUILayout.BeginHorizontal();
 			GUILayout.Label(new GUIContent(string.Format(i18n.PreviewWeightFmt, PreviewWeight.ToString("F2")), i18n.PreviewWeightTooltip), GUILayout.ExpandWidth(false));
-			PreviewWeight = GUILayout.HorizontalSlider(PreviewWeight, 0f, 1f, GUILayout.ExpandWidth(true));
+			PreviewWeight = GUILayout.HorizontalSlider(PreviewWeight, 0f, 1f, slider: _layerSliderStyle, GUI.skin.horizontalSliderThumb, GUILayout.ExpandWidth(true));
 			GUILayout.EndHorizontal();
 		}
 
@@ -297,10 +297,23 @@ namespace BlendShapeEditor
 			if (isUpdatingExisting)
 			{
 				GUILayout.Label($"{i18n.BakeNameLabel} {ActiveDeformData.EditingExistingShapeName}");
+				BakeCalcNormals = GUILayout.Toggle(BakeCalcNormals,
+					new GUIContent(BakeCalcNormals ? i18n.BakeCalcNormalsOnFmt : i18n.BakeCalcNormalsOffFmt,
+						i18n.BakeCalcNormalsTooltip),
+					GUI.skin.button);
 			}
 			else
 			{
-				BakeSeparate = GUILayout.Toggle(BakeSeparate, new GUIContent(i18n.BakeSeparateLabel, i18n.BakeSeparateTooltip));
+				GUILayout.BeginHorizontal();
+				BakeSeparate = GUILayout.Toggle(BakeSeparate, 
+					new GUIContent(BakeSeparate ? i18n.BakeSeparateLabelOnFmt : i18n.BakeSeparateLabelOffFmt, 
+						i18n.BakeSeparateTooltip), 
+					GUI.skin.button);
+				BakeCalcNormals = GUILayout.Toggle(BakeCalcNormals,
+					new GUIContent(BakeCalcNormals ? i18n.BakeCalcNormalsOnFmt : i18n.BakeCalcNormalsOffFmt,
+						i18n.BakeCalcNormalsTooltip),
+					GUI.skin.button);
+				GUILayout.EndHorizontal();
 				GUILayout.BeginHorizontal();
 				GUILayout.Label(BakeSeparate ? i18n.BakePrefixLabel : i18n.BakeNameLabel, GUILayout.Width(55f));
 				var prevNameInput = _bakeNameInput;
@@ -312,11 +325,6 @@ namespace BlendShapeEditor
 				}
 				GUILayout.EndHorizontal();
 			}
-
-			BakeCalcNormals = GUILayout.Toggle(BakeCalcNormals,
-				new GUIContent(BakeCalcNormals ? i18n.BakeCalcNormalsOnFmt : i18n.BakeCalcNormalsOffFmt,
-					i18n.BakeCalcNormalsTooltip),
-				GUI.skin.button);
 			
 			bool hasLayers = ActiveDeformData != null && ActiveDeformData.HasLayers;
 			bool prev = GUI.enabled;
@@ -505,9 +513,20 @@ namespace BlendShapeEditor
 				if (i >= Enum.GetNames(typeof(VertexDisplayType)).Length) i = 0;
 				VertexDisplayMode = (VertexDisplayType)i;
 			}
-			string wireLabel = CullBackWireframe ? i18n.WireframeCullOn : i18n.WireframeCullOff;
+			string wireLabel;
+			switch (WireframeDisplayMode)
+			{
+				case WireframeDisplayType.All: wireLabel = i18n.WireframeCullOff; break;
+				case WireframeDisplayType.BackfaceCulling: wireLabel = i18n.WireframeCullOn; break;
+				case WireframeDisplayType.Interact: wireLabel = i18n.WireframeInteractOnly; break;
+				default: wireLabel = WireframeDisplayMode.ToString(); break;
+			}
 			if (GUILayout.Button(new GUIContent(wireLabel, i18n.WireframeCullTooltip)))
-				CullBackWireframe = !CullBackWireframe;
+			{
+				int wi = (int)WireframeDisplayMode + 1;
+				if (wi >= Enum.GetNames(typeof(WireframeDisplayType)).Length) wi = 0;
+				WireframeDisplayMode = (WireframeDisplayType)wi;
+			}
 			GUILayout.EndHorizontal();
 		}
 
@@ -752,7 +771,7 @@ namespace BlendShapeEditor
 				if (blendShapeCount > 0)
 				{
 					GUI.color = _exitingShapeIndicatorColor;
-					GUILayout.Label($"{blendShapeCount} Shapes", GUI.skin.box, GUILayout.ExpandWidth(false));
+					GUILayout.Label(blendShapeCount + " " + (blendShapeCount > 1 ? "Shapes" : "Shape"), GUI.skin.box, GUILayout.ExpandWidth(false));
 					GUI.color = guic;
 				}
 				GUILayout.EndHorizontal();
@@ -991,6 +1010,13 @@ namespace BlendShapeEditor
 		{
 			All,
 			BackfaceCulling,
+			Interact
+		}
+
+		public enum WireframeDisplayType
+		{
+			BackfaceCulling,
+			All,
 			Interact
 		}
 	}

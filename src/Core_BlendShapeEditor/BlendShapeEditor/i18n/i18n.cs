@@ -104,6 +104,7 @@ namespace BlendShapeEditor
         public static string CullBackWireframe;
         public static string WireframeCullOn;
         public static string WireframeCullOff;
+        public static string WireframeInteractOnly;
         public static string WireframeCullTooltip;
 
         // Symmetry
@@ -131,7 +132,8 @@ namespace BlendShapeEditor
         public static string BakeHeader;
         public static string BakeNameLabel;
         public static string BakePrefixLabel;
-        public static string BakeSeparateLabel;
+        public static string BakeSeparateLabelOnFmt;
+        public static string BakeSeparateLabelOffFmt;
         public static string BakeSeparateTooltip;
         public static string BakeButton;
         public static string UpdateButton;
