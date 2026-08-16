@@ -20,11 +20,28 @@ namespace BlendShapeEditor
 		public bool StudioMode { get; set; }
 		public static bool ForceBakePath = false;
 
+		/// Independent multiplier applied to the combined layer deltas purely for display.
+		/// Does not affect layer weights and is not taken into account when baking.
+		public float PreviewMultiplier { get; set; } = 1f;
+
 		public Mesh DisplayMesh => _displayMesh;
 
 		public Transform DisplayTransform => _displayGo ? _displayGo.transform : null;
 		
 		internal List<string> ExistingBlendShapeNames = new List<string>();
+
+		private int _editingExistingShapeIndex = -1;
+		private float _editingExistingShapeSavedWeight;
+
+		/// Restores the SMR's weight for the blendshape most recently imported via
+		/// ImportBlendShapeAsLayer, if any. Safe to call unconditionally (no-op otherwise).
+		public void RestoreEditedShapeWeight()
+		{
+			if (_editingExistingShapeIndex < 0 || !_smr)
+				return;
+			_smr.SetBlendShapeWeight(_editingExistingShapeIndex, _editingExistingShapeSavedWeight);
+			_editingExistingShapeIndex = -1;
+		}
 
 		public void Init(SkinnedMeshRenderer smr)
 		{
@@ -142,6 +159,48 @@ namespace BlendShapeEditor
 			}
 		}
 
+		/// Reads an existing blendshape's final frame deltas off the SMR's mesh and returns them
+		/// as a new, unattached DeformLayer at full weight. Returns null if the shape doesn't exist
+		/// or has no frames. Requires Init(SkinnedMeshRenderer) to have already run.
+		public DeformLayer ImportBlendShapeAsLayer(string shapeName)
+		{
+			if (!_smr || !_smr.sharedMesh)
+				return null;
+
+			Mesh mesh = _smr.sharedMesh;
+			int shapeIndex = mesh.GetBlendShapeIndex(shapeName);
+			if (shapeIndex < 0)
+			{
+				BSE.Logger.LogWarning($"ImportBlendShapeAsLayer: blendshape '{shapeName}' not found on mesh '{mesh.name}'");
+				return null;
+			}
+
+			int frameCount = mesh.GetBlendShapeFrameCount(shapeIndex);
+			if (frameCount <= 0)
+			{
+				BSE.Logger.LogWarning($"ImportBlendShapeAsLayer: blendshape '{shapeName}' has no frames");
+				return null;
+			}
+
+			int vertexCount = mesh.vertexCount;
+			var deltaVerts = new Vector3[vertexCount];
+			var deltaNormals = new Vector3[vertexCount];
+			var deltaTangents = new Vector3[vertexCount];
+			mesh.GetBlendShapeFrameVertices(shapeIndex, frameCount - 1, deltaVerts, deltaNormals, deltaTangents);
+
+			var layer = new DeformLayer(shapeName, vertexCount) { Weight = 1f };
+			deltaVerts.CopyTo(layer.Deltas, 0);
+
+			// The SMR still has this shape applied at whatever weight it was set to; leaving it
+			// active would double-apply the shape (once by skinning, once by our imported layer).
+			// Zero it out here and restore it in RestoreEditedShapeWeight() once editing ends.
+			_editingExistingShapeSavedWeight = _smr.GetBlendShapeWeight(shapeIndex);
+			_smr.SetBlendShapeWeight(shapeIndex, 0f);
+			_editingExistingShapeIndex = shapeIndex;
+
+			return layer;
+		}
+
 		public void Init(MeshFilter sourceMf, MeshRenderer sourceMr)
 		{
 			if (sourceMf.sharedMesh && !sourceMf.sharedMesh.isReadable)
@@ -250,6 +309,10 @@ namespace BlendShapeEditor
 
 		private void LateUpdate()
 		{
+			// Nothing stops the game (PoseController, animations, character reload, etc.) from
+			// raising this back up mid-edit, so re-force it to 0 every frame while we're editing it.
+			if (_editingExistingShapeIndex >= 0 && _smr)
+				_smr.SetBlendShapeWeight(_editingExistingShapeIndex, 0f);
 			DoDeformation();
 		}
 
@@ -388,12 +451,12 @@ namespace BlendShapeEditor
 					{
 						if (!StudioMode)
 							ComputeBoneMatrices();
-						ApplySkinnedDeltas(workingVerts, _cachedFinalDeltas);
+						ApplySkinnedDeltas(workingVerts, _cachedFinalDeltas, PreviewMultiplier);
 					}
 					else
 					{
 						for (int i = 0; i < workingVerts.Length; i++)
-							workingVerts[i] += _cachedFinalDeltas[i];
+							workingVerts[i] += _cachedFinalDeltas[i] * PreviewMultiplier;
 					}
 				}
 				else if (_cachedFinalDeltas != null && !_loggedDeltaMismatch)
@@ -626,12 +689,12 @@ namespace BlendShapeEditor
 			}
 		}
 
-		private void ApplySkinnedDeltas(Vector3[] verts, Vector3[] deltas)
+		private void ApplySkinnedDeltas(Vector3[] verts, Vector3[] deltas, float scale = 1f)
 		{
 			if (_boneWeights == null || _boneMatrices == null)
 			{
 				for (var i = 0; i < verts.Length; i++)
-					verts[i] += deltas[i];
+					verts[i] += deltas[i] * scale;
 				return;
 			}
 
@@ -651,7 +714,7 @@ namespace BlendShapeEditor
 					skinned += _boneMatrices[bw.boneIndex2].MultiplyVector(delta) * bw.weight2;
 				if (bw.weight3 > 0f)
 					skinned += _boneMatrices[bw.boneIndex3].MultiplyVector(delta) * bw.weight3;
-				verts[j] += skinned;
+				verts[j] += skinned * scale;
 			}
 		}
 

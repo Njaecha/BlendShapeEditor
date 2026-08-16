@@ -91,6 +91,8 @@ namespace BlendShapeEditor
 		{
 			if (Window == null)
 				return;
+			if (_deformer)
+				_deformer.PreviewMultiplier = Window.PreviewWeight;
 			if (Window.DeferRefreshRenderers)
 			{
 				Window.DeferRefreshRenderers = false;
@@ -107,6 +109,14 @@ namespace BlendShapeEditor
 				Window.DeferEnterEditMode = false;
 				OnRefreshRenderers?.Invoke();
 				DoEnterEditMode();
+			}
+			if (Window.DeferEditExistingShapeName != null)
+			{
+				string shapeName = Window.DeferEditExistingShapeName;
+				Window.DeferEditExistingShapeName = null;
+				OnRefreshRenderers?.Invoke();
+				DoEnterEditMode();
+				DoImportExistingShape(shapeName);
 			}
 			if (Window.DeferExitEditMode)
 			{
@@ -184,23 +194,30 @@ namespace BlendShapeEditor
 
 			if (Window.DeferCheckNameAvailability && _deformer)
 			{
-				BSE.Logger.LogDebug("Checking Name Availability");
-				if (!Window.BakeSeparate)
+				if (Window.ActiveDeformData?.EditingExistingShapeName != null)
 				{
-					Window.BakeNameingIssues = _deformer.ExistingBlendShapeNames.Contains(Window.BakeShapeName) ? Window.BakeShapeName : null;
+					Window.BakeNameingIssues = null;
 				}
 				else
 				{
-					var badNames = new List<string>();
-					foreach (DeformLayer deformLayer in Window.ActiveDeformData.Layers)
+					BSE.Logger.LogDebug("Checking Name Availability");
+					if (!Window.BakeSeparate)
 					{
-						if (_deformer.ExistingBlendShapeNames.Contains(Window.BakeShapeName + "_" + deformLayer.Name))
-						{
-							badNames.Add(Window.BakeShapeName + "_" + deformLayer.Name);
-						}
+						Window.BakeNameingIssues = _deformer.ExistingBlendShapeNames.Contains(Window.BakeShapeName) ? Window.BakeShapeName : null;
 					}
+					else
+					{
+						var badNames = new List<string>();
+						foreach (DeformLayer deformLayer in Window.ActiveDeformData.Layers)
+						{
+							if (_deformer.ExistingBlendShapeNames.Contains(Window.BakeShapeName + "_" + deformLayer.Name))
+							{
+								badNames.Add(Window.BakeShapeName + "_" + deformLayer.Name);
+							}
+						}
 
-					Window.BakeNameingIssues = badNames.Count > 0 ? string.Join(", ", badNames.ToArray()) : null;
+						Window.BakeNameingIssues = badNames.Count > 0 ? string.Join(", ", badNames.ToArray()) : null;
+					}
 				}
 				Window.DeferCheckNameAvailability = false;
 			}
@@ -228,6 +245,8 @@ namespace BlendShapeEditor
 				deformer.StudioMode = studioMode;
 				deformer.DeformData = deformData;
 			}
+			Window.PreviewWeight = 1f;
+			deformer.PreviewMultiplier = 1f;
 
 			renderer.TryGetOwningController(out Object controller);
 			// seems we actually don't need to disable the animator after all
@@ -336,7 +355,14 @@ namespace BlendShapeEditor
 			DeactivateHighlight();
 			SelectionTool?.CleanupCollider();
 			if (_deformer)
+			{
+				_deformer.RestoreEditedShapeWeight();
 				DestroyImmediate(_deformer);
+			}
+			// Imported layers only make sense while actively editing that specific existing shape —
+			// don't let them linger for the next time this renderer enters edit mode.
+			if (Window.ActiveDeformData?.EditingExistingShapeName != null)
+				Window.ActiveDeformData.ClearLayers();
 			SetTarget(null);
 			Window.ActiveDeformData = null;
 			Window.SetEditMode(false);
@@ -380,11 +406,13 @@ namespace BlendShapeEditor
 				return;
 			if (Window.ActiveDeformData == null || !Window.ActiveDeformData.HasLayers)
 				return;
+			string existingShapeName = Window.ActiveDeformData.EditingExistingShapeName;
+			bool isUpdate = existingShapeName != null;
 			string prefix = Window.BakeShapeName;
 			if (string.IsNullOrEmpty(prefix))
 				prefix = "BSE_Shape";
 
-			if (Window.BakeSeparate)
+			if (Window.BakeSeparate && !isUpdate)
 			{
 				var layers = new List<DeformLayer>(Window.ActiveDeformData.Layers);
 				foreach (DeformLayer layer in layers)
@@ -411,6 +439,13 @@ namespace BlendShapeEditor
 					if (!RegisterBakedShape(smr, shapeName, deltaVerts, deltaNormals, 100f))
 						return;
 				}
+			}
+			else if (isUpdate)
+			{
+				if (!_deformer.BakeToBlendShape(existingShapeName, out Vector3[] deltaVerts, out Vector3[] deltaNormals))
+					return;
+				if (!UpdateBakedShape(smr, existingShapeName, deltaVerts, deltaNormals))
+					return;
 			}
 			else
 			{
@@ -454,6 +489,35 @@ namespace BlendShapeEditor
 			}
 		}
 
+		private bool UpdateBakedShape(SkinnedMeshRenderer smr, string shapeName, Vector3[] deltaVerts, Vector3[] deltaNormals)
+		{
+			if (!_deformer.TryGetOwningController(out Object controller))
+			{
+				BSE.Logger.LogError("Could not bake and update Blendshape");
+				BSE.Logger.LogError("ShapePaintOverlay.UpdateBakedShape() -> Controller is null");
+				return false;
+			}
+			switch (controller)
+			{
+				case BlendShapeEditorItemController itemCtrl:
+				{
+					BlendShapeCreatorBridge.UpdateBlendShapeStudio(itemCtrl.ItemCtrlInfo, smr, shapeName, deltaVerts, deltaNormals);
+					RefreshPoseController(itemCtrl.gameObject);
+					return true;
+				}
+				case BlendShapeEditorCharaController charCtrl:
+				{
+					BlendShapeCreatorBridge.UpdateBlendShapeMaker(charCtrl.ChaControl, smr, shapeName, deltaVerts, deltaNormals);
+					RefreshPoseController(charCtrl.gameObject);
+					return true;
+				}
+				default:
+					BSE.Logger.LogError("Could not bake and update Blendshape");
+					BSE.Logger.LogError("ShapePaintOverlay.UpdateBakedShape() -> Controller is null");
+					return false;
+			}
+		}
+
 		private static void RefreshPoseController(GameObject poseControllerOwner)
 		{
 			try
@@ -486,6 +550,24 @@ namespace BlendShapeEditor
 			DeformLayer layer = Window.ActiveDeformData.AddLayer(mesh.vertexCount);
 			_undoStack?.Push(new LayerAddUndoEntry(Window.ActiveDeformData, layer, Window.ActiveDeformData.Layers.Count - 1));
 			StudioUndoBridge.PushDummy(this);
+		}
+
+		private void DoImportExistingShape(string shapeName)
+		{
+			if (!_deformer || !(_targetRenderer is SkinnedMeshRenderer) || Window.ActiveDeformData == null)
+				return;
+			DeformLayer layer = _deformer.ImportBlendShapeAsLayer(shapeName);
+			if (layer == null)
+			{
+				BSE.Logger.LogWarning($"DoImportExistingShape: could not import '{shapeName}'");
+				return;
+			}
+			Window.ActiveDeformData.Layers.Add(layer);
+			Window.ActiveDeformData.ActiveLayerIndex = Window.ActiveDeformData.Layers.Count - 1;
+			Window.ActiveDeformData.EditingExistingShapeName = shapeName;
+			_undoStack?.Push(new LayerAddUndoEntry(Window.ActiveDeformData, layer, Window.ActiveDeformData.Layers.Count - 1));
+			StudioUndoBridge.PushDummy(this);
+			Window.SetBakeName(shapeName);
 		}
 
 		private void DoLayerRemove(int layerIndex)

@@ -15,7 +15,11 @@
   "EnterEditMode": "Enter Edit Mode",
   "ExitEditMode": "Exit Edit Mode",
   "NoLayerWarning": "Create a layer to start sculpting",
-  
+  "ExpandExistingShapeList": "▶ Edit an existing shape",
+  "CollapseExistingShapeList": "▼ Hide",
+  "EditExistingShapeTooltip": "Load an existing blendshape's deltas into the editor to modify it. Exporting will update the same shape instead of creating a new one.",
+  "EditExistingShapeButton": "Edit",
+
   "BrushMode": "Brush",
   "GizmoMode": "Gizmo",
 
@@ -81,12 +85,16 @@
   "LayerRemoveTooltipFmt": "Remove layer [{0}]",
   "LayerDefaultNameFmt": "Layer {0}",
 
+  "PreviewWeightFmt": "Preview: {0}",
+  "PreviewWeightTooltip": "Preview the combined deformation at this strength. Does not affect layer weights and is not included when baking.",
+
   "BakeHeader": "Bake to Blendshape",
   "BakeNameLabel": "Name:",
   "BakePrefixLabel": "Prefix:",
   "BakeSeparateLabel": "Bake layers as separate shapes",
   "BakeSeparateTooltip": "When enabled, each layer becomes its own blendshape named '{prefix}_{layer}', with the layer's weight folded into its deltas. When disabled, all layers are combined into one shape using their current weights.",
   "BakeButton": "Exit and Bake to BlendShape",
+  "UpdateButton": "Exit and Update BlendShape",
 
   "HelpRenderersHeader": "Renderers",
   "HelpRenderers": "Pick a skinned mesh renderer to edit it's mesh. Since only skinned mesh renderers support Blendshapes, static meshes are not supported.",

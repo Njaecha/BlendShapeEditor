@@ -9,6 +9,7 @@ namespace BlendShapeEditor
 		public string RendererPath { get; set; }
 		public List<DeformLayer> Layers { get; private set; }
 		public int ActiveLayerIndex { get; set; }
+		public string EditingExistingShapeName { get; set; }
 
 		public DeformData(string rendererPath)
 		{
@@ -118,6 +119,7 @@ namespace BlendShapeEditor
 		{
 			Layers.Clear();
 			ActiveLayerIndex = -1;
+			EditingExistingShapeName = null;
 		}
 
 		public void MoveLayerUp(int index)

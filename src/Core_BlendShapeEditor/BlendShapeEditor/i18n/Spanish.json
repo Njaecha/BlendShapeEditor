@@ -15,6 +15,10 @@
   "EnterEditMode": "Entrar en Modo Edición",
   "ExitEditMode": "Salir del Modo Edición",
   "NoLayerWarning": "Crea una capa para comenzar a esculpir",
+  "ExpandExistingShapeList": "▶ Editar una forma existente",
+  "CollapseExistingShapeList": "▼ Ocultar",
+  "EditExistingShapeTooltip": "Carga los deltas de una forma existente en el editor para modificarla. Al exportar se actualizará la misma forma en lugar de crear una nueva.",
+  "EditExistingShapeButton": "Editar",
 
   "BrushMode": "Pincel",
   "GizmoMode": "Gizmo",
@@ -81,12 +85,16 @@
   "LayerRemoveTooltipFmt": "Eliminar capa [{0}]",
   "LayerDefaultNameFmt": "Capa {0}",
 
+  "PreviewWeightFmt": "Vista previa: {0}",
+  "PreviewWeightTooltip": "Previsualiza la deformación combinada con esta intensidad. No afecta el peso de las capas y no se incluye al hacer Bake.",
+
   "BakeHeader": "Bake a BlendShape",
   "BakeNameLabel": "\"Nombre\":",
   "BakePrefixLabel": "\"Prefijo\":",
   "BakeSeparateLabel": "Bake de capas como shapes separados",
   "BakeSeparateTooltip": "Cuando está activado, cada capa se convierte en su propio blendshape llamado '{prefix}_{capa}', con el peso de la capa incorporado en sus deltas. Cuando está desactivado, todas las capas se combinan en un solo shape usando sus pesos actuales.",
   "BakeButton": "Salir y hacer Bake a BlendShape",
+  "UpdateButton": "Salir y Actualizar BlendShape",
 
   "HelpRenderersHeader": "Renderers",
   "HelpRenderers": "Selecciona un Renderer de una Skinned Mesh para editar su Maya. Como solo los Renderers de Skinned Mesh soportan BlendShapes, las mayas estáticas no son compatibles.",

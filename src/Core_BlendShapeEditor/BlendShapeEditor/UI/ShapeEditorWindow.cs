@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using BepInEx.Configuration;
 using JetBrains.Annotations;
 using KKAPI.Utilities;
@@ -35,6 +36,7 @@ namespace BlendShapeEditor
 		public bool CullBackWireframe { get; set; } = true;
 		public VertexDisplayType VertexDisplayMode = VertexDisplayType.BackfaceCulling;
 		public bool IsEditMode { get; private set; }
+		public float PreviewWeight { get; set; } = 1f;
 
 		public ShapeEditorWindow(int windowId, Rect initialRect)
 		{
@@ -164,13 +166,18 @@ namespace BlendShapeEditor
 			DeformData activeDeformData = ActiveDeformData;
 			DrawRendererSelection();
 			GUILayout.Space(5f);
+			Color guic = GUI.color;
 
 			if (!IsEditMode)
 			{
 				if (SelectedRendererIndex == -1) GUI.enabled = false;
+				GUI.color = _editButtonColor;
 				if (GUILayout.Button(i18n.EnterEditMode))
 					DeferEnterEditMode = true;
+				GUI.color = guic;
 				GUI.enabled = true;
+
+				DrawEditExistingShapeControls();
 				return;
 			}
 
@@ -181,11 +188,12 @@ namespace BlendShapeEditor
 
 			if (activeDeformData == null || !activeDeformData.HasLayers)
 			{
-				Color guic = GUI.color;
 				GUI.color = Color.yellow;
 				GUILayout.Label(i18n.NoLayerWarning);
 				GUI.color = guic;
 				DrawLayerPanel(activeDeformData);
+				GUILayout.FlexibleSpace();
+				DrawPreviewSlider();
 				return;
 			}
 
@@ -218,29 +226,92 @@ namespace BlendShapeEditor
 			DrawLayerPanel(activeDeformData);
 			GUILayout.Space(5f);
 			GUILayout.FlexibleSpace();
+			DrawPreviewSlider();
 			DrawBakeControls();
+		}
+
+		private void DrawPreviewSlider()
+		{
+			GUILayout.Label(new GUIContent(string.Format(i18n.PreviewWeightFmt, PreviewWeight.ToString("F2")), i18n.PreviewWeightTooltip));
+			PreviewWeight = GUILayout.HorizontalSlider(PreviewWeight, 0f, 1f);
+		}
+
+		private void DrawEditExistingShapeControls()
+		{
+			if (SelectedRendererIndex == -1 || !(SelectedRenderer is SkinnedMeshRenderer smr) || !smr.sharedMesh)
+				return;
+			int shapeCount = smr.sharedMesh.blendShapeCount;
+			if (shapeCount == 0)
+				return;
+			
+			GUILayout.BeginHorizontal();
+			string toggleLabel = _showExistingShapeList ? i18n.CollapseExistingShapeList : i18n.ExpandExistingShapeList;
+			if (GUILayout.Button(new GUIContent(toggleLabel, i18n.EditExistingShapeTooltip), _showExistingShapeList ? GUILayout.Width(60f) : GUILayout.ExpandWidth(true)))
+				_showExistingShapeList = !_showExistingShapeList;
+
+			if (_showExistingShapeList)
+			{
+				_existingShapeFilter = GUILayout.TextField(_existingShapeFilter, GUILayout.ExpandWidth(true));
+				bool hasSelection = !string.IsNullOrEmpty(_selectedExistingShapeName);
+				bool prevEnabled = GUI.enabled;
+				if (!hasSelection) GUI.enabled = false;
+				Color guic = GUI.color;
+				GUI.color = _editButtonColor;
+				if (GUILayout.Button(i18n.EditExistingShapeButton, GUILayout.Width(50f)))
+					DeferEditExistingShapeName = _selectedExistingShapeName;
+				GUI.color = guic;
+				GUI.enabled = prevEnabled;
+			}
+			GUILayout.EndHorizontal();
+
+			if (!_showExistingShapeList)
+				return;
+
+			bool filtering = !string.IsNullOrEmpty(_existingShapeFilter);
+			_existingShapeScroll = GUILayout.BeginScrollView(_existingShapeScroll, "Box", GUILayout.Height(100f));
+			for (var i = 0; i < shapeCount; i++)
+			{
+				string shapeName = smr.sharedMesh.GetBlendShapeName(i);
+				if (filtering && shapeName.IndexOf(_existingShapeFilter, StringComparison.OrdinalIgnoreCase) < 0)
+					continue;
+				Color guic = GUI.color;
+				if (_selectedExistingShapeName == shapeName) GUI.color = Color.cyan;
+				if (GUILayout.Toggle(_selectedExistingShapeName == shapeName, shapeName, "Button"))
+					_selectedExistingShapeName = shapeName;
+				GUI.color = guic;
+			}
+			GUILayout.EndScrollView();
 		}
 
 		private void DrawBakeControls()
 		{
+			bool isUpdatingExisting = ActiveDeformData?.EditingExistingShapeName != null;
+
 			GUILayout.Label(i18n.BakeHeader, "Box");
-			BakeSeparate = GUILayout.Toggle(BakeSeparate, new GUIContent(i18n.BakeSeparateLabel, i18n.BakeSeparateTooltip));
-			GUILayout.BeginHorizontal();
-			GUILayout.Label(BakeSeparate ? i18n.BakePrefixLabel : i18n.BakeNameLabel, GUILayout.Width(55f));
-			var prevNameInput = _bakeNameInput;
-			_bakeNameInput = GUILayout.TextField(_bakeNameInput);
-			if (prevNameInput != _bakeNameInput)
+			if (isUpdatingExisting)
 			{
-				BakeShapeName = _bakeNameInput;
-				DeferCheckNameAvailability = true;
+				GUILayout.Label($"{i18n.BakeNameLabel} {ActiveDeformData.EditingExistingShapeName}");
 			}
-			GUILayout.EndHorizontal();
+			else
+			{
+				BakeSeparate = GUILayout.Toggle(BakeSeparate, new GUIContent(i18n.BakeSeparateLabel, i18n.BakeSeparateTooltip));
+				GUILayout.BeginHorizontal();
+				GUILayout.Label(BakeSeparate ? i18n.BakePrefixLabel : i18n.BakeNameLabel, GUILayout.Width(55f));
+				var prevNameInput = _bakeNameInput;
+				_bakeNameInput = GUILayout.TextField(_bakeNameInput);
+				if (prevNameInput != _bakeNameInput)
+				{
+					BakeShapeName = _bakeNameInput;
+					DeferCheckNameAvailability = true;
+				}
+				GUILayout.EndHorizontal();
+			}
 
 			bool hasLayers = ActiveDeformData != null && ActiveDeformData.HasLayers;
 			bool prev = GUI.enabled;
 			if (!hasLayers || !IsEditMode)
 				GUI.enabled = false;
-			if (BakeNameingIssues != null)
+			if (!isUpdatingExisting && BakeNameingIssues != null)
 			{
 				var guic = GUI.color;
 				GUI.color = Color.yellow;
@@ -248,9 +319,10 @@ namespace BlendShapeEditor
 				GUILayout.Label(BakeNameingIssues);
 				GUI.color = guic;
 			}
-			else if (GUILayout.Button(i18n.BakeButton))
+			else if (GUILayout.Button(isUpdatingExisting ? i18n.UpdateButton : i18n.BakeButton))
 			{
-				BakeShapeName = _bakeNameInput;
+				if (!isUpdatingExisting)
+					BakeShapeName = _bakeNameInput;
 				DeferBake = true;
 			}
 			GUI.enabled = prev;
@@ -638,7 +710,7 @@ namespace BlendShapeEditor
 			if (IsEditMode)
 				GUI.enabled = false;
 
-			_rendererScroll = GUILayout.BeginScrollView(_rendererScroll, "Box", GUILayout.Height(IsEditMode ? 80f : Math.Max(80, _windowRect.height - 150f)));
+			_rendererScroll = GUILayout.BeginScrollView(_rendererScroll, "Box", GUILayout.ExpandHeight(true));
 			for (var i = 0; i < Renderers.Count; i++)
 			{
 				if (!Renderers[i])
@@ -646,17 +718,30 @@ namespace BlendShapeEditor
 				if (filtering && Renderers[i].name.IndexOf(_rendererFilter, StringComparison.OrdinalIgnoreCase) < 0)
 					continue;
 				string name = Renderers[i].name;
+				var blendShapeCount = 0;
 				if (!(Renderers[i] is SkinnedMeshRenderer smr))
 				{
 					name += i18n.NotSkinnedSuffix;
 					GUI.enabled = false;
 				}
+				else
+				{
+					blendShapeCount = smr.sharedMesh.blendShapeCount;
+				}
 				Color guic = GUI.color;
+				GUILayout.BeginHorizontal();
 				if (SelectedRendererIndex == i) GUI.color = Color.cyan;
 				if (GUILayout.Toggle(SelectedRendererIndex == i, name, "Button"))
 					SelectedRendererIndex = i;
 				GUI.color = guic;
 				GUI.enabled = true;
+				if (blendShapeCount > 0)
+				{
+					GUI.color = _exitingShapeIndicatorColor;
+					GUILayout.Label($"{blendShapeCount} Shapes", GUI.skin.box, GUILayout.ExpandWidth(false));
+					GUI.color = guic;
+				}
+				GUILayout.EndHorizontal();
 			}
 			GUILayout.EndScrollView();
 
@@ -676,6 +761,12 @@ namespace BlendShapeEditor
 			{
 				name = name + "_2";
 			}
+			BakeShapeName = name;
+			_bakeNameInput = name;
+		}
+
+		public void SetBakeName(string name)
+		{
 			BakeShapeName = name;
 			_bakeNameInput = name;
 		}
@@ -820,12 +911,19 @@ namespace BlendShapeEditor
 		private Vector2 _layerScroll;
 		private Vector2 _rendererScroll;
 		private string _rendererFilter = "";
+		private bool _showExistingShapeList;
+		private Vector2 _existingShapeScroll;
+		private string _existingShapeFilter = "";
+		private string _selectedExistingShapeName;
 		private int _renamingLayerIndex = -1;
 		private string _renamingText = "";
 		private string _bakeNameInput = "BSE_Shape";
+		private readonly Color _editButtonColor = new Color(1f,0.5f,0.7f);
+		private readonly Color _exitingShapeIndicatorColor = new Color(1f, 0.6f, 0.4f);
 		internal bool HotkeyUsed;
 
 		public bool DeferEnterEditMode;
+		public string DeferEditExistingShapeName;
 		public bool DeferExitEditMode;
 		public bool DeferLayerAdd;
 		public bool DeferRefreshRenderers;

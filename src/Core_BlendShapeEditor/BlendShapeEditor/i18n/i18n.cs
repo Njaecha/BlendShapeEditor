@@ -30,6 +30,10 @@ namespace BlendShapeEditor
         public static string EnterEditMode;
         public static string ExitEditMode;
         public static string NoLayerWarning;
+        public static string ExpandExistingShapeList;
+        public static string CollapseExistingShapeList;
+        public static string EditExistingShapeTooltip;
+        public static string EditExistingShapeButton;
 
         // Mode switch
         public static string BrushMode;
@@ -119,6 +123,10 @@ namespace BlendShapeEditor
         public static string LayerRemoveTooltipFmt;
         public static string LayerDefaultNameFmt;
 
+        // Preview
+        public static string PreviewWeightFmt;
+        public static string PreviewWeightTooltip;
+
         // Bake
         public static string BakeHeader;
         public static string BakeNameLabel;
@@ -126,6 +134,7 @@ namespace BlendShapeEditor
         public static string BakeSeparateLabel;
         public static string BakeSeparateTooltip;
         public static string BakeButton;
+        public static string UpdateButton;
 
         // Help
         public static string HelpRenderersHeader;

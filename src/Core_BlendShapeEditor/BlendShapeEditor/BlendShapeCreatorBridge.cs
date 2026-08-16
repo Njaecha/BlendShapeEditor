@@ -3,6 +3,7 @@ using Studio;
 using UnityEngine;
 using CharacterController = BlendshapeCreator.CharacterController;
 using BSE = BlendShapeEditor.BlendShapeEditorPlugin;
+using BSC = BlendshapeCreator.BlendshapeCreator;
 
 namespace BlendShapeEditor
 {
@@ -14,18 +15,18 @@ namespace BlendShapeEditor
 			Vector3[] deltaVerts, Vector3[] deltaNormals, float weight)
 		{
 			if (oci == null) return;
-			BlendshapeCreator.BlendshapeCreator.BlendShape.BlendShapeDeltas deltas =
-				new BlendshapeCreator.BlendshapeCreator.BlendShape.BlendShapeDeltas(deltaVerts, deltaNormals, null);
-			if (BlendshapeCreator.BlendshapeCreator.BlendShape.RegisterNewBlendShape(oci, renderer, shapeName,
+			BSC.BlendShape.BlendShapeDeltas deltas =
+				new BSC.BlendShape.BlendShapeDeltas(deltaVerts, deltaNormals, null);
+			if (BSC.BlendShape.RegisterNewBlendShape(oci, renderer, shapeName,
 				    deltas,
-				    out BlendshapeCreator.BlendshapeCreator.BlendShape shape, weight))
+				    out BSC.BlendShape shape, weight))
 			{
 				BSE.Logger.LogInfo(
 					$"BlendShapeCreatorBridge: registered '{shapeName}' on studio item '{oci.treeNodeObject?.textName}'");
 			}
 			else
 			{
-				BSE.Logger.LogWarning("Could not register BlendShape.");
+				BSE.Logger.LogError("Could not register BlendShape.");
 			}
 		}
 
@@ -34,9 +35,9 @@ namespace BlendShapeEditor
 			Vector3[] deltaVerts, Vector3[] deltaNormals, float weight)
 		{
 			if (!chaCtrl) return;
-			BlendshapeCreator.BlendshapeCreator.BlendShape.BlendShapeDeltas deltas = new BlendshapeCreator.BlendshapeCreator.BlendShape.BlendShapeDeltas(deltaVerts, deltaNormals, null);
-			if (BlendshapeCreator.BlendshapeCreator.BlendShape.RegisterNewBlendShape(chaCtrl, renderer, shapeName, deltas,
-				out BlendshapeCreator.BlendshapeCreator.BlendShape shape, weight))
+			BSC.BlendShape.BlendShapeDeltas deltas = new BSC.BlendShape.BlendShapeDeltas(deltaVerts, deltaNormals, null);
+			if (BSC.BlendShape.RegisterNewBlendShape(chaCtrl, renderer, shapeName, deltas,
+				out BSC.BlendShape shape, weight))
 			{
 				BSE.Logger.LogInfo(
 					$"BlendShapeCreatorBridge: registered '{shapeName}' on character '{chaCtrl.name}'");
@@ -44,7 +45,39 @@ namespace BlendShapeEditor
 			}
 			else
 			{
-				BSE.Logger.LogWarning("Could not register BlendShape.");
+				BSE.Logger.LogError("Could not register BlendShape.");
+			}
+		}
+
+		public static void UpdateBlendShapeMaker(ChaControl chaCtrl, SkinnedMeshRenderer renderer, string shapeName,
+			Vector3[] deltaVerts, Vector3[] deltaNormals)
+		{
+			if (!chaCtrl) return;
+			
+			BSC.BlendShape.BlendShapeDeltas deltas = new BSC.BlendShape.BlendShapeDeltas(deltaVerts, deltaNormals, null);
+			if (BSC.BlendShape.UpdateBlendShape(chaCtrl, renderer, shapeName, deltas, out BSC.BlendShape shape))
+			{
+				BSE.Logger.LogInfo("BlendShape successfully updated.");
+			}
+			else
+			{
+				BSE.Logger.LogError("Could not update BlendShape.");
+			}
+		}
+		
+		public static void UpdateBlendShapeStudio(ObjectCtrlInfo oci, SkinnedMeshRenderer renderer, string shapeName,
+			Vector3[] deltaVerts, Vector3[] deltaNormals)
+		{
+			if (oci == null) return;
+			
+			BSC.BlendShape.BlendShapeDeltas deltas = new BSC.BlendShape.BlendShapeDeltas(deltaVerts, deltaNormals, null);
+			if (BSC.BlendShape.UpdateBlendShape(oci, renderer, shapeName, deltas, out BSC.BlendShape shape))
+			{
+				BSE.Logger.LogInfo("BlendShape successfully updated.");
+			}
+			else
+			{
+				BSE.Logger.LogError("Could not update BlendShape.");
 			}
 		}
 	}
