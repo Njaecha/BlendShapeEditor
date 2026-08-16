@@ -196,14 +196,14 @@ namespace BlendShapeEditor
 			{
 				if (Window.ActiveDeformData?.EditingExistingShapeName != null)
 				{
-					Window.BakeNameingIssues = null;
+					Window.BakeNamingIssues = null;
 				}
 				else
 				{
 					BSE.Logger.LogDebug("Checking Name Availability");
 					if (!Window.BakeSeparate)
 					{
-						Window.BakeNameingIssues = _deformer.ExistingBlendShapeNames.Contains(Window.BakeShapeName) ? Window.BakeShapeName : null;
+						Window.BakeNamingIssues = _deformer.ExistingBlendShapeNames.Contains(Window.BakeShapeName) ? Window.BakeShapeName : null;
 					}
 					else
 					{
@@ -216,7 +216,7 @@ namespace BlendShapeEditor
 							}
 						}
 
-						Window.BakeNameingIssues = badNames.Count > 0 ? string.Join(", ", badNames.ToArray()) : null;
+						Window.BakeNamingIssues = badNames.Count > 0 ? string.Join(", ", badNames.ToArray()) : null;
 					}
 				}
 				Window.DeferCheckNameAvailability = false;
@@ -431,7 +431,7 @@ namespace BlendShapeEditor
 							scaled[i] = layer.Deltas[i] * layer.Weight;
 					}
 					var shapeName = $"{prefix}_{layer.Name}";
-					if (!_deformer.BakeToBlendShape(shapeName, scaled, out Vector3[] deltaVerts, out Vector3[] deltaNormals))
+					if (!_deformer.BakeToBlendShape(shapeName, scaled, out Vector3[] deltaVerts, out Vector3[] deltaNormals, Window.BakeCalcNormals))
 					{
 						BSE.Logger.LogWarning($"DoBake: skipping layer '{layer.Name}' — bake failed");
 						continue;
@@ -442,14 +442,14 @@ namespace BlendShapeEditor
 			}
 			else if (isUpdate)
 			{
-				if (!_deformer.BakeToBlendShape(existingShapeName, out Vector3[] deltaVerts, out Vector3[] deltaNormals))
+				if (!_deformer.BakeToBlendShape(existingShapeName, out Vector3[] deltaVerts, out Vector3[] deltaNormals, Window.BakeCalcNormals))
 					return;
 				if (!UpdateBakedShape(smr, existingShapeName, deltaVerts, deltaNormals))
 					return;
 			}
 			else
 			{
-				if (!_deformer.BakeToBlendShape(prefix, out Vector3[] deltaVerts, out Vector3[] deltaNormals))
+				if (!_deformer.BakeToBlendShape(prefix, out Vector3[] deltaVerts, out Vector3[] deltaNormals, Window.BakeCalcNormals))
 					return;
 				if (!RegisterBakedShape(smr, prefix, deltaVerts, deltaNormals, 100f))
 					return;

@@ -95,6 +95,10 @@
   "BakeSeparateTooltip": "When enabled, each layer becomes its own blendshape named '{prefix}_{layer}', with the layer's weight folded into its deltas. When disabled, all layers are combined into one shape using their current weights.",
   "BakeButton": "Exit and Bake to BlendShape",
   "UpdateButton": "Exit and Update BlendShape",
+  "BakeCalcNormalsOnFmt": "☑ Calculate new normals",
+  "BakeCalcNormalsOffFmt": "☐ Calculate new normals",
+  "BakeCalcNormalsTooltip": "Calculates new normals for edited vertices. Can fix lighting oddities when the baked blendshape is used, but can also break lighting on meshes with specialized normals.",
+  "BakeNameConflictWarning": "Following name(s) already exist and cannot be used:",
 
   "HelpRenderersHeader": "Renderers",
   "HelpRenderers": "Pick a skinned mesh renderer to edit it's mesh. Since only skinned mesh renderers support Blendshapes, static meshes are not supported.",

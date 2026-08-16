@@ -95,6 +95,10 @@
   "BakeSeparateTooltip": "Cuando está activado, cada capa se convierte en su propio blendshape llamado '{prefix}_{capa}', con el peso de la capa incorporado en sus deltas. Cuando está desactivado, todas las capas se combinan en un solo shape usando sus pesos actuales.",
   "BakeButton": "Salir y hacer Bake a BlendShape",
   "UpdateButton": "Salir y Actualizar BlendShape",
+  "BakeCalcNormalsOnFmt": "☑ Calcular nuevas normales",
+  "BakeCalcNormalsOffFmt": "☐ Calcular nuevas normales",
+  "BakeCalcNormalsTooltip": "Calcula nuevas normales para los vértices editados. Puede corregir problemas de iluminación al usar el blendshape generado, pero también puede alterar la iluminación en mayas con normales especializadas.",
+  "BakeNameConflictWarning": "Los siguientes nombres ya existen y no se pueden usar:",
 
   "HelpRenderersHeader": "Renderers",
   "HelpRenderers": "Selecciona un Renderer de una Skinned Mesh para editar su Maya. Como solo los Renderers de Skinned Mesh soportan BlendShapes, las mayas estáticas no son compatibles.",

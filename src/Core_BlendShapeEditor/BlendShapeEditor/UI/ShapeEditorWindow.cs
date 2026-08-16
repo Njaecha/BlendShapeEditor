@@ -181,8 +181,10 @@ namespace BlendShapeEditor
 				return;
 			}
 
+			GUI.color = Color.yellow;
 			if (GUILayout.Button(i18n.ExitEditMode))
 				DeferExitEditMode = true;
+			GUI.color = guic;
 			DrawCullingToggles();
 			GUILayout.Space(5f);
 
@@ -232,8 +234,12 @@ namespace BlendShapeEditor
 
 		private void DrawPreviewSlider()
 		{
-			GUILayout.Label(new GUIContent(string.Format(i18n.PreviewWeightFmt, PreviewWeight.ToString("F2")), i18n.PreviewWeightTooltip));
-			PreviewWeight = GUILayout.HorizontalSlider(PreviewWeight, 0f, 1f);
+			bool hasLayers = ActiveDeformData != null && ActiveDeformData.HasLayers;
+			if (!hasLayers) return;
+			GUILayout.BeginHorizontal();
+			GUILayout.Label(new GUIContent(string.Format(i18n.PreviewWeightFmt, PreviewWeight.ToString("F2")), i18n.PreviewWeightTooltip), GUILayout.ExpandWidth(false));
+			PreviewWeight = GUILayout.HorizontalSlider(PreviewWeight, 0f, 1f, GUILayout.ExpandWidth(true));
+			GUILayout.EndHorizontal();
 		}
 
 		private void DrawEditExistingShapeControls()
@@ -286,7 +292,7 @@ namespace BlendShapeEditor
 		private void DrawBakeControls()
 		{
 			bool isUpdatingExisting = ActiveDeformData?.EditingExistingShapeName != null;
-
+			Color guic = GUI.color;
 			GUILayout.Label(i18n.BakeHeader, "Box");
 			if (isUpdatingExisting)
 			{
@@ -307,24 +313,32 @@ namespace BlendShapeEditor
 				GUILayout.EndHorizontal();
 			}
 
+			BakeCalcNormals = GUILayout.Toggle(BakeCalcNormals,
+				new GUIContent(BakeCalcNormals ? i18n.BakeCalcNormalsOnFmt : i18n.BakeCalcNormalsOffFmt,
+					i18n.BakeCalcNormalsTooltip),
+				GUI.skin.button);
+			
 			bool hasLayers = ActiveDeformData != null && ActiveDeformData.HasLayers;
 			bool prev = GUI.enabled;
 			if (!hasLayers || !IsEditMode)
 				GUI.enabled = false;
-			if (!isUpdatingExisting && BakeNameingIssues != null)
+			if (!isUpdatingExisting && BakeNamingIssues != null)
 			{
-				var guic = GUI.color;
 				GUI.color = Color.yellow;
-				GUILayout.Label("Following name(s) already exist and cannot be used:");
-				GUILayout.Label(BakeNameingIssues);
-				GUI.color = guic;
+				GUILayout.Label(i18n.BakeNameConflictWarning);
+				GUILayout.Label(BakeNamingIssues);
 			}
-			else if (GUILayout.Button(isUpdatingExisting ? i18n.UpdateButton : i18n.BakeButton))
+			else
 			{
-				if (!isUpdatingExisting)
-					BakeShapeName = _bakeNameInput;
-				DeferBake = true;
+				GUI.color = _editButtonColor;
+				if (GUILayout.Button(isUpdatingExisting ? i18n.UpdateButton : i18n.BakeButton))
+				{
+					if (!isUpdatingExisting) BakeShapeName = _bakeNameInput;
+					DeferBake = true;
+				}
 			}
+
+			GUI.color = guic;
 			GUI.enabled = prev;
 		}
 
@@ -933,9 +947,10 @@ namespace BlendShapeEditor
 		public int DeferLayerMoveDown = -1;
 		public bool DeferBake;
 		public bool DeferCheckNameAvailability;
-		[CanBeNull] internal string BakeNameingIssues = null;
+		[CanBeNull] internal string BakeNamingIssues = null;
 		public string BakeShapeName = "BSE_Shape";
 		public bool BakeSeparate = true;
+		public bool BakeCalcNormals = true;
 
 		private int _weightSliderLayer = -1;
 		private float _weightSliderBefore;

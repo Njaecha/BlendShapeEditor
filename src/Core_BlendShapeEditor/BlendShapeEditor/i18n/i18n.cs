@@ -135,6 +135,10 @@ namespace BlendShapeEditor
         public static string BakeSeparateTooltip;
         public static string BakeButton;
         public static string UpdateButton;
+        public static string BakeCalcNormalsOnFmt;
+        public static string BakeCalcNormalsOffFmt;
+        public static string BakeCalcNormalsTooltip;
+        public static string BakeNameConflictWarning;
 
         // Help
         public static string HelpRenderersHeader;

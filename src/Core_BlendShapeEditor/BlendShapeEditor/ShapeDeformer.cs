@@ -1007,7 +1007,7 @@ namespace BlendShapeEditor
 		
 		/// <summary>
 		/// Bakes the current combined deformation into a new blendshape on the SMR's mesh.
-		/// Returns the blendshape index, or -1 on failure.
+		/// Returns if the baking was successful.
 		/// Also returns the delta arrays used for BSC registration.
 		/// </summary>
 		public bool BakeToBlendShape(string shapeName, out Vector3[] outDeltaVerts, out Vector3[] outDeltaNormals,
@@ -1059,6 +1059,7 @@ namespace BlendShapeEditor
 				int[] triangles = mesh.triangles;
 				// ComputePartialDeltaNormals needs real geometry; skip it when the mesh is
 				// non-readable rather than feeding it empty arrays.
+				BSE.Logger.LogDebug("BakeToBlendShape: computing delta normals");
 				if (bindVerts != null && bindVerts.Length == vertCount && triangles != null && triangles.Length != 0)
 					outDeltaNormals = MeshHelper.ComputePartialDeltaNormals(bindVerts, bindNormals, delta, triangles);
 				else
