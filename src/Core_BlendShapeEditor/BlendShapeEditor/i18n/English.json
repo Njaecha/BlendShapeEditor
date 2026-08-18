@@ -84,6 +84,8 @@
   "LayerMoveDownTooltipFmt": "Move layer down [{0}]",
   "LayerRenameTooltip": "Rename layer",
   "LayerRemoveTooltipFmt": "Remove layer [{0}]",
+  "LayerHideTooltip": "Hide this layer's contribution from the preview. Does not affect layer weight and is not included when baking.",
+  "LayerShowTooltip": "Show this layer's contribution in the preview.",
   "LayerDefaultNameFmt": "Layer {0}",
 
   "PreviewWeightFmt": "Preview: {0}",

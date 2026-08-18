@@ -82,36 +82,28 @@ namespace BlendShapeEditor
 
 		private void DrawWindow(int id)
 		{
-			try
+			GUILayout.BeginVertical();
+			if (GUI.Button(new Rect(new Vector2(_windowRect.width-25, 5), new Vector2(20, 20)),"?"))
+				_showHelp = !_showHelp;
+			
+			Color guic = GUI.color;
+			if (MaterialEditorBridge.BridgeAvailable) // only show ME-connect toggle if bridge is available
 			{
-				GUILayout.BeginVertical();
-				if (GUI.Button(new Rect(new Vector2(_windowRect.width-25, 5), new Vector2(20, 20)),"?"))
-					_showHelp = !_showHelp;
-				
-				Color guic = GUI.color;
-				if (MaterialEditorBridge.BridgeAvailable) // only show ME-connect toggle if bridge is available
+				if (MatEditFilter) GUI.color = Color.magenta;
+				bool prevMef = MatEditFilter;
+				MatEditFilter = GUI.Toggle(new Rect(5,2,110,20),MatEditFilter, new GUIContent(i18n.MaterialEditorFilter, i18n.MaterialEditorFilterTooltip));
+				if (prevMef != MatEditFilter)
 				{
-					if (MatEditFilter) GUI.color = Color.magenta;
-					bool prevMef = MatEditFilter;
-					MatEditFilter = GUI.Toggle(new Rect(5,2,110,20),MatEditFilter, new GUIContent(i18n.MaterialEditorFilter, i18n.MaterialEditorFilterTooltip));
-					if (prevMef != MatEditFilter)
-					{
-						DeferRefreshRenderers = true;
-					}
-					GUI.color = guic;
+					DeferRefreshRenderers = true;
 				}
-				
-				GUILayout.Space(5f);
-
-				DrawShapeTab();
-
-				GUILayout.EndVertical();
+				GUI.color = guic;
 			}
-			catch (Exception ex)
-			{
-				GUILayout.EndVertical();
-				BSE.Logger.LogWarning("GUI draw error: " + ex.Message);
-			}
+			
+			GUILayout.Space(5f);
+
+			DrawShapeTab();
+
+			GUILayout.EndVertical();
 			
 			IMGUIUtils.DrawTooltip(_windowRect, 200);
 			_windowRect = IMGUIUtils.DragResizeEatWindow(id,  _windowRect);
@@ -244,7 +236,7 @@ namespace BlendShapeEditor
 
 		private void DrawEditExistingShapeControls()
 		{
-			if (SelectedRendererIndex == -1 || !(SelectedRenderer is SkinnedMeshRenderer smr) || !smr.sharedMesh)
+			if (SelectedRendererIndex == -1 || !SelectedRenderer || !(SelectedRenderer is SkinnedMeshRenderer smr) || !smr.sharedMesh)
 				return;
 			int shapeCount = smr.sharedMesh.blendShapeCount;
 			if (shapeCount == 0)
@@ -573,7 +565,7 @@ namespace BlendShapeEditor
 			if (data == null || data.Layers.Count == 0)
 				return;
 
-			_layerScroll = GUILayout.BeginScrollView(_layerScroll, GUILayout.Height(140f));
+			_layerScroll = GUILayout.BeginScrollView(_layerScroll, GUILayout.ExpandHeight(true));
 			for (var i = 0; i < data.Layers.Count; i++)
 			{
 				DeformLayer layer = data.Layers[i];
@@ -626,6 +618,16 @@ namespace BlendShapeEditor
 				}
 
 				GUILayout.Label(layer.Weight.ToString("F2"), GUILayout.Width(30f));
+				
+				if (layer.Hidden) GUI.color = _hiddenIndicatorColor;
+				string hideTooltip = layer.Hidden ? i18n.LayerShowTooltip : i18n.LayerHideTooltip;
+				// for some unholy reason "H" is displayed as [Letter "H"], so I have to use an alternative character: Ｈ
+				if (GUILayout.Button(new GUIContent("Ｈ", hideTooltip), _smallButtonStyle, GUILayout.Width(20f)))
+				{
+					data.SetLayerHidden(i, !layer.Hidden);
+				}
+				GUI.color = guic;
+
 				if (i == 0) GUI.enabled = false;
 				if (GUILayout.Button(new GUIContent("˄", string.Format(i18n.LayerMoveUpTooltipFmt, BSE.KeyLayerUp.S())), _smallButtonStyle, GUILayout.Width(20f)))
 				{
@@ -953,6 +955,7 @@ namespace BlendShapeEditor
 		private string _bakeNameInput = "BSE_Shape";
 		private readonly Color _editButtonColor = new Color(1f,0.5f,0.7f);
 		private readonly Color _exitingShapeIndicatorColor = new Color(1f, 0.6f, 0.4f);
+		private readonly Color _hiddenIndicatorColor = new Color(1f, 0.4f, 0.3f);
 		internal bool HotkeyUsed;
 
 		public bool DeferEnterEditMode;
@@ -1015,8 +1018,8 @@ namespace BlendShapeEditor
 
 		public enum WireframeDisplayType
 		{
-			BackfaceCulling,
 			All,
+			BackfaceCulling,
 			Interact
 		}
 	}

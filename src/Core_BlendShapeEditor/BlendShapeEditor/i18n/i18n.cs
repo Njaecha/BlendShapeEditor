@@ -122,6 +122,8 @@ namespace BlendShapeEditor
         public static string LayerMoveDownTooltipFmt;
         public static string LayerRenameTooltip;
         public static string LayerRemoveTooltipFmt;
+        public static string LayerHideTooltip;
+        public static string LayerShowTooltip;
         public static string LayerDefaultNameFmt;
 
         // Preview

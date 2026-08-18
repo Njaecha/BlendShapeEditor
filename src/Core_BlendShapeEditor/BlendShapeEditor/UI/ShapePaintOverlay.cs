@@ -1287,7 +1287,7 @@ namespace BlendShapeEditor
 				float screenYMin = Screen.height - yMax;
 				float screenYMax = Screen.height - yMin;
 				Rect screenRect = new Rect(xMin, screenYMin, xMax - xMin, screenYMax - screenYMin);
-				bool[] visMask = (Window != null && Window.WireframeDisplayMode == ShapeEditorWindow.WireframeDisplayType.BackfaceCulling) ? _vertexVisible : null;
+				bool[] visMask = (Window != null && Window.VertexDisplayMode == ShapeEditorWindow.VertexDisplayType.BackfaceCulling) ? _vertexVisible : null;
 				if ((mods & EventModifiers.Control) != 0)
 					SelectionTool.DeselectBox(cam, screenRect, visMask);
 				else

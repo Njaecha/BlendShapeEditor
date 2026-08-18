@@ -9,6 +9,7 @@ namespace BlendShapeEditor
 		public Vector3[] Deltas { get; set; }
 		public float Weight { get; set; }
 		public bool Dirty { get; set; }
+		public bool Hidden { get; set; }
 
 		public DeformLayer(string name, int vertexCount)
 		{

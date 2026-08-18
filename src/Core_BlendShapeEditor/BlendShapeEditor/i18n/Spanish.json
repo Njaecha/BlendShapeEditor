@@ -84,6 +84,8 @@
   "LayerMoveDownTooltipFmt": "Mover capa abajo [{0}]",
   "LayerRenameTooltip": "Renombrar capa",
   "LayerRemoveTooltipFmt": "Eliminar capa [{0}]",
+  "LayerHideTooltip": "Oculta la contribución de esta capa en la vista previa. No afecta el peso de la capa y no se incluye al hacer Bake.",
+  "LayerShowTooltip": "Muestra la contribución de esta capa en la vista previa.",
   "LayerDefaultNameFmt": "Capa {0}",
 
   "PreviewWeightFmt": "Vista previa: {0}",

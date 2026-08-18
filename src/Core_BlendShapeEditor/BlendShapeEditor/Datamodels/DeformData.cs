@@ -39,7 +39,7 @@ namespace BlendShapeEditor
 			ActiveLayerIndex = index;
 		}
 
-		public Vector3[] ComputeFinalDelta()
+		public Vector3[] ComputeFinalDelta(bool respectHidden = false)
 		{
 			if (Layers.Count == 0)
 				return null;
@@ -55,6 +55,7 @@ namespace BlendShapeEditor
 			{
 				float weight = layer.Weight;
 				if (!(weight > 0f) || layer.Deltas.Length != vertexCount) continue;
+				if (respectHidden && layer.Hidden) continue;
 				Vector3[] deltas = layer.Deltas;
 				for (var k = 0; k < vertexCount; k++)
 					_finalDeltas[k] += deltas[k] * weight;
@@ -86,6 +87,16 @@ namespace BlendShapeEditor
 			if (Mathf.Approximately(Layers[index].Weight, clamped))
 				return;
 			Layers[index].Weight = clamped;
+			Layers[index].Dirty = true;
+		}
+
+		public void SetLayerHidden(int index, bool hidden)
+		{
+			if (index < 0 || index >= Layers.Count)
+				return;
+			if (Layers[index].Hidden == hidden)
+				return;
+			Layers[index].Hidden = hidden;
 			Layers[index].Dirty = true;
 		}
 

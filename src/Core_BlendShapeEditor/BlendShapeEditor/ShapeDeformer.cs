@@ -443,7 +443,7 @@ namespace BlendShapeEditor
 			if (hasLayers)
 			{
 				if (DeformData.AnyDirty() || _cachedFinalDeltas == null)
-					_cachedFinalDeltas = DeformData.ComputeFinalDelta();
+					_cachedFinalDeltas = DeformData.ComputeFinalDelta(respectHidden: true);
 
 				if (_cachedFinalDeltas != null && _cachedFinalDeltas.Length == workingVerts.Length)
 				{
