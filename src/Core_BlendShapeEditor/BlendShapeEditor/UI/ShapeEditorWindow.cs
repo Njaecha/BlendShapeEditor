@@ -38,6 +38,9 @@ namespace BlendShapeEditor
 		public bool IsEditMode { get; private set; }
 		public float PreviewWeight { get; set; } = 1f;
 
+		/// When editing an existing shape, keeps PreviewWeight synced to the shape's live weight.
+		public bool SyncPreviewWithLiveWeight { get; set; } = true;
+
 		public ShapeEditorWindow(int windowId, Rect initialRect)
 		{
 			_windowId = windowId;
@@ -228,10 +231,22 @@ namespace BlendShapeEditor
 		{
 			bool hasLayers = ActiveDeformData != null && ActiveDeformData.HasLayers;
 			if (!hasLayers) return;
+			bool isEditingExisting = ActiveDeformData.EditingExistingShapeName != null;
+
 			GUILayout.BeginHorizontal();
 			GUILayout.Label(new GUIContent(string.Format(i18n.PreviewWeightFmt, PreviewWeight.ToString("F2")), i18n.PreviewWeightTooltip), GUILayout.ExpandWidth(false));
+			bool prevEnabled = GUI.enabled;
+			if (isEditingExisting && SyncPreviewWithLiveWeight)
+				GUI.enabled = false;
 			PreviewWeight = GUILayout.HorizontalSlider(PreviewWeight, 0f, 1f, slider: _layerSliderStyle, GUI.skin.horizontalSliderThumb, GUILayout.ExpandWidth(true));
+			GUI.enabled = prevEnabled;
 			GUILayout.EndHorizontal();
+
+			if (isEditingExisting)
+			{
+				SyncPreviewWithLiveWeight = GUILayout.Toggle(SyncPreviewWithLiveWeight,
+					new GUIContent(i18n.SyncPreviewLabel, i18n.SyncPreviewTooltip));
+			}
 		}
 
 		private void DrawEditExistingShapeControls()
