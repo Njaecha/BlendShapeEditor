@@ -90,6 +90,8 @@
 
   "PreviewWeightFmt": "Vista previa: {0}",
   "PreviewWeightTooltip": "Previsualiza la deformación combinada con esta intensidad. No afecta el peso de las capas y no se incluye al hacer Bake.",
+  "SyncPreviewLabel": "Sincronizar con peso del personaje",
+  "SyncPreviewTooltip": "Mantiene el slider de vista previa siguiendo el peso que BlendShapeCreator/FaceGUI le está aplicando actualmente a esta shape, en vez de un valor fijo.",
 
   "BakeHeader": "Bake a BlendShape",
   "BakeNameLabel": "\"Nombre\":",
@@ -129,4 +131,3 @@
   "HelpAdditionalHeader": "Adicional",
   "HelpAdditional": "\"Atajos\":\n- Undo/Redo con [{0}] / [{1}]"
 }
-
