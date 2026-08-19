@@ -33,6 +33,14 @@ namespace BlendShapeEditor
 		private int _editingExistingShapeIndex = -1;
 		private float _editingExistingShapeSavedWeight;
 
+		/// Weight (0-100) the game is currently trying to apply to the shape being edited,
+		/// sampled each frame before it's zeroed out to avoid double-applying the shape.
+		public float LiveExternalWeight { get; private set; }
+
+		/// When true, PreviewMultiplier is driven from LiveExternalWeight instead of being set
+		/// externally. Applied in the same LateUpdate pass as DoDeformation to avoid a 1-frame lag.
+		public bool SyncPreviewWithLiveWeight { get; set; }
+
 		/// Restores the SMR's weight for the blendshape most recently imported via
 		/// ImportBlendShapeAsLayer, if any. Safe to call unconditionally (no-op otherwise).
 		public void RestoreEditedShapeWeight()
@@ -41,6 +49,7 @@ namespace BlendShapeEditor
 				return;
 			_smr.SetBlendShapeWeight(_editingExistingShapeIndex, _editingExistingShapeSavedWeight);
 			_editingExistingShapeIndex = -1;
+			LiveExternalWeight = 0f;
 		}
 
 		public void Init(SkinnedMeshRenderer smr)
@@ -197,6 +206,8 @@ namespace BlendShapeEditor
 			_editingExistingShapeSavedWeight = _smr.GetBlendShapeWeight(shapeIndex);
 			_smr.SetBlendShapeWeight(shapeIndex, 0f);
 			_editingExistingShapeIndex = shapeIndex;
+			// Seed before the first LateUpdate runs.
+			LiveExternalWeight = _editingExistingShapeSavedWeight;
 
 			return layer;
 		}
@@ -311,8 +322,15 @@ namespace BlendShapeEditor
 		{
 			// Nothing stops the game (PoseController, animations, character reload, etc.) from
 			// raising this back up mid-edit, so re-force it to 0 every frame while we're editing it.
+			// Sample before zeroing, and apply sync here so it stays in the same LateUpdate pass
+			// as DoDeformation (avoids a cross-frame lag between sampling and display).
 			if (_editingExistingShapeIndex >= 0 && _smr)
+			{
+				LiveExternalWeight = _smr.GetBlendShapeWeight(_editingExistingShapeIndex);
 				_smr.SetBlendShapeWeight(_editingExistingShapeIndex, 0f);
+				if (SyncPreviewWithLiveWeight)
+					PreviewMultiplier = Mathf.Clamp01(LiveExternalWeight / 100f);
+			}
 			DoDeformation();
 		}
 
