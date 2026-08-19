@@ -91,8 +91,6 @@ namespace BlendShapeEditor
 		{
 			if (Window == null)
 				return;
-			if (_deformer)
-				_deformer.PreviewMultiplier = Window.PreviewWeight;
 			if (Window.DeferRefreshRenderers)
 			{
 				Window.DeferRefreshRenderers = false;
@@ -226,6 +224,17 @@ namespace BlendShapeEditor
 				Window.DeferBake = false;
 				DoBake();
 			}
+
+			if (_deformer)
+			{
+				bool isEditingExisting = Window.ActiveDeformData?.EditingExistingShapeName != null;
+				_deformer.SyncPreviewWithLiveWeight = isEditingExisting && Window.SyncPreviewWithLiveWeight;
+				if (!_deformer.SyncPreviewWithLiveWeight)
+					_deformer.PreviewMultiplier = Window.PreviewWeight;
+				else
+					// Label display only; the mesh itself is already synced in LateUpdate.
+					Window.PreviewWeight = _deformer.PreviewMultiplier;
+			}
 		}
 		
 		// private Animator _animatorTurnedOff = null;
@@ -246,6 +255,7 @@ namespace BlendShapeEditor
 				deformer.DeformData = deformData;
 			}
 			Window.PreviewWeight = 1f;
+			Window.SyncPreviewWithLiveWeight = false;
 			deformer.PreviewMultiplier = 1f;
 
 			renderer.TryGetOwningController(out Object controller);
@@ -568,6 +578,9 @@ namespace BlendShapeEditor
 			_undoStack?.Push(new LayerAddUndoEntry(Window.ActiveDeformData, layer, Window.ActiveDeformData.Layers.Count - 1));
 			StudioUndoBridge.PushDummy(this);
 			Window.SetBakeName(shapeName);
+			// Start the preview at the shape's pre-edit weight, synced live by default.
+			Window.SyncPreviewWithLiveWeight = true;
+			Window.PreviewWeight = Mathf.Clamp01(_deformer.LiveExternalWeight / 100f);
 		}
 
 		private void DoLayerRemove(int layerIndex)
