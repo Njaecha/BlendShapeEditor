@@ -90,6 +90,8 @@
 
   "PreviewWeightFmt": "Preview: {0}",
   "PreviewWeightTooltip": "Preview the combined deformation at this strength. Does not affect layer weights and is not included when baking.",
+  "SyncPreviewLabel": "Sync with character weight",
+  "SyncPreviewTooltip": "Keep the preview slider following the weight BlendShapeCreator/FaceGUI is currently applying to this shape, instead of a fixed value.",
 
   "BakeHeader": "Bake to Blendshape",
   "BakeNameLabel": "Name:",
