@@ -129,6 +129,8 @@ namespace BlendShapeEditor
         // Preview
         public static string PreviewWeightFmt;
         public static string PreviewWeightTooltip;
+        public static string SyncPreviewLabel;
+        public static string SyncPreviewTooltip;
 
         // Bake
         public static string BakeHeader;
