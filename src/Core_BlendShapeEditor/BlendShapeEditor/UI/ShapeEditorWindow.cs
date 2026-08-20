@@ -259,7 +259,7 @@ namespace BlendShapeEditor
 			
 			GUILayout.BeginHorizontal();
 			string toggleLabel = _showExistingShapeList ? i18n.CollapseExistingShapeList : i18n.ExpandExistingShapeList;
-			if (GUILayout.Button(new GUIContent(toggleLabel, i18n.EditExistingShapeTooltip), _showExistingShapeList ? GUILayout.Width(60f) : GUILayout.ExpandWidth(true)))
+			if (GUILayout.Button(new GUIContent(toggleLabel, i18n.EditExistingShapeTooltip), _showExistingShapeList ? GUILayout.ExpandWidth(false) : GUILayout.ExpandWidth(true)))
 				_showExistingShapeList = !_showExistingShapeList;
 
 			if (_showExistingShapeList)
@@ -788,7 +788,7 @@ namespace BlendShapeEditor
 				if (blendShapeCount > 0)
 				{
 					GUI.color = _exitingShapeIndicatorColor;
-					GUILayout.Label(blendShapeCount + " " + (blendShapeCount > 1 ? "Shapes" : "Shape"), GUI.skin.box, GUILayout.ExpandWidth(false));
+					GUILayout.Label(string.Format(blendShapeCount > 1 ? i18n.ShapeCountPluralFmt : i18n.ShapeCountSingularFmt, blendShapeCount), GUI.skin.box, GUILayout.ExpandWidth(false));
 					GUI.color = guic;
 				}
 				GUILayout.EndHorizontal();
