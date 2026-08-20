@@ -34,6 +34,8 @@ namespace BlendShapeEditor
         public static string CollapseExistingShapeList;
         public static string EditExistingShapeTooltip;
         public static string EditExistingShapeButton;
+        public static string ShapeCountSingularFmt;
+        public static string ShapeCountPluralFmt;
 
         // Mode switch
         public static string BrushMode;
@@ -170,6 +172,39 @@ namespace BlendShapeEditor
         public static string HelpWarning;
         public static string HelpAdditionalHeader;
         public static string HelpAdditional;
+
+        // Key display names, indexed by KeyCode name via KeyName().
+        public static string Key_LeftControl;
+        public static string Key_RightControl;
+        public static string Key_LeftShift;
+        public static string Key_RightShift;
+        public static string Key_LeftAlt;
+        public static string Key_RightAlt;
+        public static string Key_LeftWindows;
+        public static string Key_RightWindows;
+        public static string Key_LeftCommand;
+        public static string Key_RightCommand;
+        public static string Key_UpArrow;
+        public static string Key_DownArrow;
+        public static string Key_LeftArrow;
+        public static string Key_RightArrow;
+        public static string Key_Home;
+        public static string Key_End;
+        public static string Key_PageUp;
+        public static string Key_PageDown;
+        public static string Key_Insert;
+        public static string Key_Delete;
+        public static string Key_Tab;
+        public static string Key_Backspace;
+        public static string Key_Return;
+        public static string Key_KeypadEnter;
+        public static string Key_Escape;
+        public static string Key_Space;
+        public static string Key_CapsLock;
+        public static string Key_Mouse0;
+        public static string Key_Mouse1;
+        public static string Key_Mouse2;
+        public static string Key_None;
         
         #endregion
 
@@ -181,6 +216,14 @@ namespace BlendShapeEditor
         public static void SetLanguage(Language lang)
         {
             Load(lang);
+        }
+
+        /// Localized display name for a KeyCode. Falls back to KeyCode.ToString() if untranslated.
+        public static string KeyName(KeyCode key)
+        {
+            var field = typeof(i18n).GetField("Key_" + key, BindingFlags.Public | BindingFlags.Static);
+            var value = field?.GetValue(null) as string;
+            return string.IsNullOrEmpty(value) ? key.ToString() : value;
         }
 
         private static void Load(Language lang)
