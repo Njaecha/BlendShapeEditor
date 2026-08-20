@@ -322,8 +322,7 @@ namespace BlendShapeEditor
 		{
 			// Nothing stops the game (PoseController, animations, character reload, etc.) from
 			// raising this back up mid-edit, so re-force it to 0 every frame while we're editing it.
-			// Sample before zeroing, and apply sync here so it stays in the same LateUpdate pass
-			// as DoDeformation (avoids a cross-frame lag between sampling and display).
+			// Sample before zeroing so sync uses the freshest value, same LateUpdate pass as DoDeformation.
 			if (_editingExistingShapeIndex >= 0 && _smr)
 			{
 				LiveExternalWeight = _smr.GetBlendShapeWeight(_editingExistingShapeIndex);
