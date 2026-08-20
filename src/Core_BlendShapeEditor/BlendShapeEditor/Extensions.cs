@@ -1,4 +1,5 @@
-﻿using BepInEx.Configuration;
+using BepInEx.Configuration;
+using System.Collections.Generic;
 using UnityEngine;
 using KKAPI;
 using KKAPI.Utilities;
@@ -56,7 +57,12 @@ namespace BlendShapeEditor
 
         public static string S(this ConfigEntry<KeyboardShortcut> entry)
         {
-            return entry.Value.ToString();
+            var shortcut = entry.Value;
+            var parts = new List<string>();
+            foreach (var modifier in shortcut.Modifiers)
+                parts.Add(i18n.KeyName(modifier));
+            parts.Add(i18n.KeyName(shortcut.MainKey));
+            return string.Join(" + ", parts.ToArray());
         }
     }
 }
