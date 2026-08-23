@@ -66,12 +66,14 @@
   "VertexDisplayAll": "◀ Show all verts ▶",
   "VertexDisplayBackface": "◀ Cull back-facing ▶",
   "VertexDisplayInteract": "◀ Interacting only ▶",
-  "VertexDisplayTooltip": "Cycle vertex display: all / backface-culled / only verts being interacted with",
+  "VertexDisplayTooltip": "Cycle vertex display: All / Backface-culled / Interact-only",
   "CullBackWireframe": "Cull back-facing edges",
   "WireframeCullOn": "◀ Hide back-edges ▶",
   "WireframeCullOff": "◀ Show back-edges ▶",
   "WireframeInteractOnly": "◀ Interacting only ▶",
-  "WireframeCullTooltip": "Cycle wireframe display: backface-culled / always shown / only edges touching interacted vertices",
+  "WireframeCullTooltip": "Cycle wireframe display: All / Backface-culled / Interact-only",
+  "OverlayHideButton": "Ｈ",
+  "OverlayHideTooltip": "Completely hides vertex dots and wireframe",
 
   "Mirror": "Symmetry",
   "SymmetryAxis": "Axis",
@@ -92,7 +94,7 @@
 
   "PreviewWeightFmt": "Preview: {0}",
   "PreviewWeightTooltip": "Preview the combined deformation at this strength. Does not affect layer weights and is not included when baking.",
-  "SyncPreviewLabel": "Sync with character weight",
+  "SyncPreviewLabel": "Sync",
   "SyncPreviewTooltip": "Keep the preview slider following the weight BlendShapeCreator/FaceGUI is currently applying to this shape, instead of a fixed value.",
 
   "BakeHeader": "Bake to Blendshape",

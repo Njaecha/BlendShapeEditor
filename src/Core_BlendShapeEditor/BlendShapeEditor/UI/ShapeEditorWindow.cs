@@ -34,7 +34,8 @@ namespace BlendShapeEditor
 		public FalloffMode GizmoFalloff { get; set; }
 		public bool DeferSkinningDiagnostic { get; set; }
 		public WireframeDisplayType WireframeDisplayMode { get; set; } = WireframeDisplayType.BackfaceCulling;
-		public VertexDisplayType VertexDisplayMode = VertexDisplayType.BackfaceCulling;
+		public VertexDisplayType VertexDisplayMode { get; set; } = VertexDisplayType.BackfaceCulling;
+		public bool OverlayHide { get; set; } = false;
 		public bool IsEditMode { get; private set; }
 		public float PreviewWeight { get; set; } = 1f;
 
@@ -240,13 +241,13 @@ namespace BlendShapeEditor
 				GUI.enabled = false;
 			PreviewWeight = GUILayout.HorizontalSlider(PreviewWeight, 0f, 1f, slider: _layerSliderStyle, GUI.skin.horizontalSliderThumb, GUILayout.ExpandWidth(true));
 			GUI.enabled = prevEnabled;
-			GUILayout.EndHorizontal();
-
 			if (isEditingExisting)
 			{
 				SyncPreviewWithLiveWeight = GUILayout.Toggle(SyncPreviewWithLiveWeight,
-					new GUIContent(i18n.SyncPreviewLabel, i18n.SyncPreviewTooltip));
+					new GUIContent(i18n.SyncPreviewLabel, i18n.SyncPreviewTooltip), GUI.skin.button, GUILayout.ExpandWidth(false));
 			}
+			GUILayout.EndHorizontal();
+
 		}
 
 		private void DrawEditExistingShapeControls()
@@ -505,30 +506,41 @@ namespace BlendShapeEditor
 
 		private void DrawCullingToggles()
 		{
+			Color guic =  GUI.color;
 			GUILayout.BeginHorizontal();
-			string label;
+			string vertexLabel;
 			switch (VertexDisplayMode)
 			{
-				case VertexDisplayType.All: label = i18n.VertexDisplayAll; break;
-				case VertexDisplayType.BackfaceCulling: label = i18n.VertexDisplayBackface; break;
-				case VertexDisplayType.Interact: label = i18n.VertexDisplayInteract; break;
-				default: label = VertexDisplayMode.ToString(); break;
+				case VertexDisplayType.All: vertexLabel = i18n.VertexDisplayAll; break;
+				case VertexDisplayType.BackfaceCulling: vertexLabel = i18n.VertexDisplayBackface; break;
+				case VertexDisplayType.Interact: vertexLabel = i18n.VertexDisplayInteract; break;
+				default: vertexLabel = VertexDisplayMode.ToString(); break;
 			}
-			if (GUILayout.Button(new GUIContent(label, i18n.VertexDisplayTooltip)))
+			if (GUILayout.Button(new GUIContent(vertexLabel, i18n.VertexDisplayTooltip)))
 			{
 				int i = (int)VertexDisplayMode + 1;
 				if (i >= Enum.GetNames(typeof(VertexDisplayType)).Length) i = 0;
 				VertexDisplayMode = (VertexDisplayType)i;
 			}
-			string wireLabel;
+
+			if (OverlayHide) GUI.color = _hiddenIndicatorColor;
+			if (Hotkey(BSE.KeyHideOverlay) || GUILayout.Button(
+				    new GUIContent(i18n.OverlayHideButton, i18n.OverlayHideTooltip), _smallButtonStyle, GUILayout.Width(25)))
+			{
+				this.OverlayHide = !this.OverlayHide;
+			}
+
+			GUI.color = guic;
+			
+			string wireframeLabel;
 			switch (WireframeDisplayMode)
 			{
-				case WireframeDisplayType.All: wireLabel = i18n.WireframeCullOff; break;
-				case WireframeDisplayType.BackfaceCulling: wireLabel = i18n.WireframeCullOn; break;
-				case WireframeDisplayType.Interact: wireLabel = i18n.WireframeInteractOnly; break;
-				default: wireLabel = WireframeDisplayMode.ToString(); break;
+				case WireframeDisplayType.All: wireframeLabel = i18n.WireframeCullOff; break;
+				case WireframeDisplayType.BackfaceCulling: wireframeLabel = i18n.WireframeCullOn; break;
+				case WireframeDisplayType.Interact: wireframeLabel = i18n.WireframeInteractOnly; break;
+				default: wireframeLabel = WireframeDisplayMode.ToString(); break;
 			}
-			if (GUILayout.Button(new GUIContent(wireLabel, i18n.WireframeCullTooltip)))
+			if (GUILayout.Button(new GUIContent(wireframeLabel, i18n.WireframeCullTooltip)))
 			{
 				int wi = (int)WireframeDisplayMode + 1;
 				if (wi >= Enum.GetNames(typeof(WireframeDisplayType)).Length) wi = 0;

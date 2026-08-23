@@ -82,6 +82,7 @@ namespace BlendShapeEditor
         public static ConfigEntry<KeyboardShortcut> KeyBake { get; private set; }
         public static ConfigEntry<KeyboardShortcut> KeyCycleFalloff { get; private set; }
         public static ConfigEntry<KeyboardShortcut> KeyMirror { get; private set; }
+        public static ConfigEntry<KeyboardShortcut> KeyHideOverlay { get; private set; }
 
         public static ConfigEntry<KeyboardShortcut> KeyLayerDown { get; private set; }
         public static ConfigEntry<KeyboardShortcut> KeyLayerUp { get; private set; }
@@ -193,6 +194,10 @@ namespace BlendShapeEditor
             KeyMirror = Config.Bind("Shortcuts - General", "Mirror",
                 new KeyboardShortcut(KeyCode.M, KeyCode.LeftControl),
                 "Enable Mirroring");
+            
+            KeyHideOverlay = Config.Bind("Shortcuts - General", "Hide Overlay", 
+                new KeyboardShortcut(KeyCode.Space), 
+                "Hide entire vertex and wireframe overlay");
 
             KeyCycleFalloff = Config.Bind("Shortcuts - General", "Cycle Falloff",
                 new KeyboardShortcut(KeyCode.S, KeyCode.LeftShift),

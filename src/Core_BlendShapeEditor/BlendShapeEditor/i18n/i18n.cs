@@ -108,6 +108,8 @@ namespace BlendShapeEditor
         public static string WireframeCullOff;
         public static string WireframeInteractOnly;
         public static string WireframeCullTooltip;
+        public static string OverlayHideButton;
+        public static string OverlayHideTooltip;
 
         // Symmetry
         public static string Mirror;

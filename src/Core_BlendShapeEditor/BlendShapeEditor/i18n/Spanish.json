@@ -66,12 +66,14 @@
   "VertexDisplayAll": "◀ Mostrar todos los vértices ▶",
   "VertexDisplayBackface": "◀ Ocultar vértices traseros ▶",
   "VertexDisplayInteract": "◀ Sólo en interacción ▶",
-  "VertexDisplayTooltip": "Alternar visualización de vértices: todos / sin traseros / sólo los que están en interacción",
+  "VertexDisplayTooltip": "Alternar visualización de vértices: Todos / Sin traseros / Sólo en interacción",
   "CullBackWireframe": "Ocultar bordes traseros",
   "WireframeCullOn": "◀ Ocultar bordes traseros ▶",
   "WireframeCullOff": "◀ Mostrar bordes traseros ▶",
   "WireframeInteractOnly": "◀ Sólo en interacción ▶",
-  "WireframeCullTooltip": "Alternar visualización del wireframe: sin traseros / mostrar todo / sólo bordes en interacción",
+  "WireframeCullTooltip": "Alternar visualización del wireframe: Todos / Sin traseros / Sólo en interacción",
+  "OverlayHideButton": "Ｈ",
+  "OverlayHideTooltip": "Oculta completamente los vértices y el wireframe",
 
   "Mirror": "Simetría",
   "SymmetryAxis": "Eje",
@@ -92,7 +94,7 @@
 
   "PreviewWeightFmt": "Vista previa: {0}",
   "PreviewWeightTooltip": "Previsualiza la deformación combinada con esta intensidad. No afecta el peso de las capas y no se incluye al hacer Bake.",
-  "SyncPreviewLabel": "Sincronizar con peso del personaje",
+  "SyncPreviewLabel": "Sinc",
   "SyncPreviewTooltip": "Mantiene el slider de vista previa siguiendo el peso que BlendShapeCreator/FaceGUI le está aplicando actualmente a esta shape, en vez de un valor fijo.",
 
   "BakeHeader": "Bake a BlendShape",

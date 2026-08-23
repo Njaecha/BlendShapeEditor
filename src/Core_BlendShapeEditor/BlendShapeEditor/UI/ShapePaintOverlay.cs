@@ -1497,7 +1497,7 @@ namespace BlendShapeEditor
 
 		private void DrawVertexDots(Camera cam)
 		{
-			if (_wireVerts == null || cam == null)
+			if (_wireVerts == null || !cam || Window.OverlayHide)
 				return;
 			// Compute billboard offset vectors in world space (camera-right / camera-up)
 			// Convert dot pixel size to a world-space half-extent
@@ -1565,7 +1565,7 @@ namespace BlendShapeEditor
 
 		private void DrawWireframe()
 		{
-			if (_edges == null || !_wireLineMesh)
+			if (_edges == null || !_wireLineMesh || Window.OverlayHide)
 				return;
 			Camera main = _camera;
 			if (!main)
