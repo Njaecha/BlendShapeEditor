@@ -36,6 +36,8 @@ namespace BlendShapeEditor
 		public WireframeDisplayType WireframeDisplayMode { get; set; } = WireframeDisplayType.BackfaceCulling;
 		public VertexDisplayType VertexDisplayMode { get; set; } = VertexDisplayType.BackfaceCulling;
 		public bool OverlayHide { get; set; } = false;
+		public bool WeldEnabled { get; set; }
+		public bool DeferRebuildWeldGroups { get; set; }
 		public bool IsEditMode { get; private set; }
 		public float PreviewWeight { get; set; } = 1f;
 
@@ -220,7 +222,7 @@ namespace BlendShapeEditor
 			else
 				DrawGizmoControls();
 
-			GUILayout.Space(8f);
+			DrawWeldControls();
 			DrawLayerPanel(activeDeformData);
 			GUILayout.Space(5f);
 			GUILayout.FlexibleSpace();
@@ -433,11 +435,13 @@ namespace BlendShapeEditor
 		private void DrawGizmoControls()
 		{
 			GUILayout.BeginHorizontal();
-			if (Hotkey(BSE.KeyGizmoTranslate) || GUILayout.Toggle(GizmoModeIndex == 0, string.Format(i18n.TranslateLabelFmt, BSE.KeyGizmoTranslate.S()), "Button"))
+			if (Hotkey(BSE.KeyGizmoTranslate) || GUILayout.Toggle(GizmoModeIndex == 0, string.Format(i18n.TranslateLabelFmt, BSE.KeyGizmoTranslate.S()), "Button", GUILayout.Width((_windowRect.width-10)/3-10)))
 				GizmoModeIndex = 0;
-			if (Hotkey(BSE.KeyGizmoRotate) || GUILayout.Toggle(GizmoModeIndex == 1, string.Format(i18n.RotateLabelFmt, BSE.KeyGizmoRotate.S()), "Button"))
+			GUILayout.FlexibleSpace();
+			if (Hotkey(BSE.KeyGizmoRotate) || GUILayout.Toggle(GizmoModeIndex == 1, string.Format(i18n.RotateLabelFmt, BSE.KeyGizmoRotate.S()), "Button", GUILayout.Width((_windowRect.width-10)/3-10)))
 				GizmoModeIndex = 1;
-			if (Hotkey(BSE.KeyGizmoScale) || GUILayout.Toggle(GizmoModeIndex == 2, string.Format(i18n.ScaleLabelFmt, BSE.KeyGizmoScale.S()), "Button"))
+			GUILayout.FlexibleSpace();
+			if (Hotkey(BSE.KeyGizmoScale) || GUILayout.Toggle(GizmoModeIndex == 2, string.Format(i18n.ScaleLabelFmt, BSE.KeyGizmoScale.S()), "Button", GUILayout.Width((_windowRect.width-10)/3-10)))
 				GizmoModeIndex = 2;
 			GUILayout.EndHorizontal();
 
@@ -447,11 +451,13 @@ namespace BlendShapeEditor
 				if (GizmoSpaceIndex > 2) GizmoSpaceIndex = 0;
 			}
 			GUILayout.BeginHorizontal();
-			if (GUILayout.Toggle(GizmoSpaceIndex == 0, new GUIContent(i18n.WorldSpace, string.Format(i18n.WorldSpaceTooltipFmt, BSE.KeyGizmoCycleGizmoSpace)), "Button"))
+			if (GUILayout.Toggle(GizmoSpaceIndex == 0, new GUIContent(i18n.WorldSpace, string.Format(i18n.WorldSpaceTooltipFmt, BSE.KeyGizmoCycleGizmoSpace)), "Button", GUILayout.Width((_windowRect.width-10)/3-10)))
 				GizmoSpaceIndex = 0;
-			if (GUILayout.Toggle(GizmoSpaceIndex == 1, new GUIContent(i18n.ObjectSpace, string.Format(i18n.ObjectSpaceTooltipFmt, BSE.KeyGizmoCycleGizmoSpace)), "Button"))
+			GUILayout.FlexibleSpace();
+			if (GUILayout.Toggle(GizmoSpaceIndex == 1, new GUIContent(i18n.ObjectSpace, string.Format(i18n.ObjectSpaceTooltipFmt, BSE.KeyGizmoCycleGizmoSpace)), "Button", GUILayout.Width((_windowRect.width-10)/3-10)))
 				GizmoSpaceIndex = 1;
-			if (GUILayout.Toggle(GizmoSpaceIndex == 2, new GUIContent(i18n.NormalSpace, string.Format(i18n.NormalSpaceTooltipFmt, BSE.KeyGizmoCycleGizmoSpace)), "Button"))
+			GUILayout.FlexibleSpace();
+			if (GUILayout.Toggle(GizmoSpaceIndex == 2, new GUIContent(i18n.NormalSpace, string.Format(i18n.NormalSpaceTooltipFmt, BSE.KeyGizmoCycleGizmoSpace)), "Button", GUILayout.Width((_windowRect.width-10)/3-10)))
 				GizmoSpaceIndex = 2;
 			GUILayout.EndHorizontal();
 			
@@ -546,6 +552,22 @@ namespace BlendShapeEditor
 				if (wi >= Enum.GetNames(typeof(WireframeDisplayType)).Length) wi = 0;
 				WireframeDisplayMode = (WireframeDisplayType)wi;
 			}
+			GUILayout.EndHorizontal();
+		}
+
+		private void DrawWeldControls()
+		{
+			Color guic = GUI.color;
+			GUILayout.BeginHorizontal();
+			if (WeldEnabled) GUI.color = BSE.WeldToggleColor.Value;
+			string weldButtonLabel = WeldEnabled ? i18n.WeldToggleButtonOnFmt : i18n.WeldToggleButtonOffFmt;
+			if (Hotkey(BSE.KeyToggleWeld) || GUILayout.Button(new GUIContent(weldButtonLabel, i18n.WeldToggleTooltip), GUILayout.ExpandWidth(true)))
+			{
+				WeldEnabled = !WeldEnabled;
+				if (WeldEnabled) DeferRebuildWeldGroups = true;
+			}
+			GUI.color = guic;
+			GUILayout.Label($"[{BSE.KeyToggleWeld.S()}]", _labelTextRightStyle, GUILayout.ExpandWidth(false));
 			GUILayout.EndHorizontal();
 		}
 

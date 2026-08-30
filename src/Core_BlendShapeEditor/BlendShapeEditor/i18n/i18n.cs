@@ -111,6 +111,11 @@ namespace BlendShapeEditor
         public static string OverlayHideButton;
         public static string OverlayHideTooltip;
 
+        // Weld
+        public static string WeldToggleButtonOnFmt;
+        public static string WeldToggleButtonOffFmt;
+        public static string WeldToggleTooltip;
+
         // Symmetry
         public static string Mirror;
         public static string SymmetryAxis;

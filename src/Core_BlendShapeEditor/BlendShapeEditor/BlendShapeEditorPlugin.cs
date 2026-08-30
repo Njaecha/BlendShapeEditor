@@ -46,6 +46,9 @@ namespace BlendShapeEditor
 
         public static ConfigEntry<float> VertexDotSize { get; private set; }
 
+        public static ConfigEntry<float> WeldRadius { get; private set; }
+        public static ConfigEntry<bool> ShowWeldedVertexColor { get; private set; }
+
         #region Colors
 
         public static ConfigEntry<Color> BrushColorMove { get; private set; }
@@ -55,6 +58,8 @@ namespace BlendShapeEditor
         public static ConfigEntry<Color> VertexColorDefault { get; private set; }
         public static ConfigEntry<Color> VertexColorSelected { get; private set; }
         public static ConfigEntry<Color> VertexColorHover { get; private set; }
+        public static ConfigEntry<Color> VertexColorWelded { get; private set; }
+        public static ConfigEntry<Color> WeldToggleColor { get; private set; }
 
         public static ConfigEntry<Color> WireColorDefault { get; private set; }
         public static ConfigEntry<Color> WireColorSelected { get; private set; }
@@ -83,6 +88,7 @@ namespace BlendShapeEditor
         public static ConfigEntry<KeyboardShortcut> KeyCycleFalloff { get; private set; }
         public static ConfigEntry<KeyboardShortcut> KeyMirror { get; private set; }
         public static ConfigEntry<KeyboardShortcut> KeyHideOverlay { get; private set; }
+        public static ConfigEntry<KeyboardShortcut> KeyToggleWeld { get; private set; }
 
         public static ConfigEntry<KeyboardShortcut> KeyLayerDown { get; private set; }
         public static ConfigEntry<KeyboardShortcut> KeyLayerUp { get; private set; }
@@ -130,6 +136,10 @@ namespace BlendShapeEditor
                 Config.Bind("Colors - Mesh", "Vertex Hovered", Color.yellow, "Hovered color for vertices");
             VertexColorSelected = Config.Bind("Colors - Mesh", "Vertex Selected", Color.green,
                 "Selected color for vertices");
+            VertexColorWelded = Config.Bind("Colors - Mesh", "Vertex Welded", new Color(1f, 0.5f, 0f),
+                "Base color for vertices that are welded to another nearby vertex");
+            WeldToggleColor = Config.Bind("Colors - Mesh", "Weld Toggle Highlight", new Color(1f, 0.5f, 0f),
+                "Highlight color for the weld toggle button while weld mode is enabled");
 
             WireColorDefault = Config.Bind("Colors - Mesh", "Wire Default", new Color(0, 0, 0, 0.3f),
                 "Default color for edges");
@@ -195,9 +205,13 @@ namespace BlendShapeEditor
                 new KeyboardShortcut(KeyCode.M, KeyCode.LeftControl),
                 "Enable Mirroring");
             
-            KeyHideOverlay = Config.Bind("Shortcuts - General", "Hide Overlay", 
-                new KeyboardShortcut(KeyCode.Space), 
+            KeyHideOverlay = Config.Bind("Shortcuts - General", "Hide Overlay",
+                new KeyboardShortcut(KeyCode.Space),
                 "Hide entire vertex and wireframe overlay");
+
+            KeyToggleWeld = Config.Bind("Shortcuts - General", "Toggle Weld",
+                new KeyboardShortcut(KeyCode.None),
+                "Toggle vertex welding");
 
             KeyCycleFalloff = Config.Bind("Shortcuts - General", "Cycle Falloff",
                 new KeyboardShortcut(KeyCode.S, KeyCode.LeftShift),
@@ -303,6 +317,15 @@ namespace BlendShapeEditor
             VertexDotSize = Config.Bind("General", "Vertex Dot Size", 4f,
                 new ConfigDescription("Size of the Dot displayed for each vertex", new AcceptableValueList<float>(2f, 3f, 4f, 5f, 6f)));
 
+            WeldRadius = Config.Bind("General", "Weld Radius", 0.0001f,
+                new ConfigDescription("Distance under which vertices are welded together and treated as a single vertex for selection and movement",
+                    new AcceptableValueRange<float>(0.00001f, 0.005f)));
+            WeldRadius.SettingChanged += (s, e) => ShapePaintOverlay.RebuildAllWeldGroups();
+
+            ShowWeldedVertexColor = Config.Bind("General", "Show Welded Vertex Color", true,
+                "Highlight welded vertices and edges with the Vertex Welded color. Disable to keep welding active without the visual marking.");
+            ShowWeldedVertexColor.SettingChanged += (s, e) => ShapePaintOverlay.MarkAllWireColorsDirty();
+
             UILanguage = Config.Bind("General", "UI Language", i18n.Language.English, "UI display language");
 
             UndoMaxSteps = Config.Bind("General", "Undo Max Steps", 50,
@@ -336,7 +359,7 @@ namespace BlendShapeEditor
                 SidebarToggle = new SidebarToggle("Blendshape Editor", false, this);
                 e.AddSidebarControl(SidebarToggle).ValueChanged.Subscribe(b =>
                 {
-                    ShapeEditorWindow window = MakerUI.Overlay?.Window;
+                    ShapeEditorWindow window = MakerUI.Overlay ? MakerUI.Overlay.Window : null;
                     if (window != null) window.Visible = SidebarToggle.Value;
                 });
             };

@@ -42,6 +42,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\ShapeDeformer.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\BlendShapeEditorPlugin.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\SpatialHashGrid.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\WeldGroups.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\i18n\i18n.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\StilettoBridge.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\UI\Controls\InputHelper.cs" />

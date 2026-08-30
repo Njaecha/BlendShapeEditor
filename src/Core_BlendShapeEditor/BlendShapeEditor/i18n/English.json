@@ -75,6 +75,10 @@
   "OverlayHideButton": "Ｈ",
   "OverlayHideTooltip": "Completely hides vertex dots and wireframe",
 
+  "WeldToggleButtonOnFmt": "☑ Weld",
+  "WeldToggleButtonOffFmt": "☐ Weld",
+  "WeldToggleTooltip": "Weld nearby vertices together so they act as a single vertex for selection and movement. Prevents seams from ripping open when editing. Weld radius can be adjusted in the plugin settings.",
+
   "Mirror": "Symmetry",
   "SymmetryAxis": "Axis",
   "SetCenter": "Set Center",

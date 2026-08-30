@@ -75,6 +75,10 @@
   "OverlayHideButton": "Ｈ",
   "OverlayHideTooltip": "Oculta completamente los vértices y el wireframe",
 
+  "WeldToggleButtonOnFmt": "☑ Soldar",
+  "WeldToggleButtonOffFmt": "☐ Soldar",
+  "WeldToggleTooltip": "Suelda los vértices cercanos para que actúen como un solo vértice al seleccionar y mover. Evita que las costuras se abran al editar. El radio de soldadura se puede ajustar en la configuración del plugin.",
+
   "Mirror": "Simetría",
   "SymmetryAxis": "Eje",
   "SetCenter": "Definir Centro",

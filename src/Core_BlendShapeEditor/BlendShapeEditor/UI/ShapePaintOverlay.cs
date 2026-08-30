@@ -14,6 +14,18 @@ namespace BlendShapeEditor
 	[DefaultExecutionOrder(32001)]
 	public class ShapePaintOverlay : MonoBehaviour
 	{
+		public static void RebuildAllWeldGroups()
+		{
+			foreach (ShapePaintOverlay overlay in _activeInstances)
+				overlay.RebuildWeldGroups();
+		}
+
+		public static void MarkAllWireColorsDirty()
+		{
+			foreach (ShapePaintOverlay overlay in _activeInstances)
+				overlay._wireColorsDirty = true;
+		}
+
 		public static void RebuildGradients()
 		{
 			GradientAlphaKey[] alphaKeys = new[]
@@ -49,6 +61,7 @@ namespace BlendShapeEditor
 
 		private void Awake()
 		{
+			_activeInstances.Add(this);
 			_camera = Camera.main;
 			Shader shader = Shader.Find("Hidden/Internal-Colored");
 			if (!shader) return;
@@ -101,6 +114,11 @@ namespace BlendShapeEditor
 			{
 				Window.DeferUpdateWireColors = false;
 				_wireColorsDirty = true;
+			}
+			if (Window.DeferRebuildWeldGroups)
+			{
+				Window.DeferRebuildWeldGroups = false;
+				RebuildWeldGroups();
 			}
 			if (Window.DeferEnterEditMode)
 			{
@@ -354,6 +372,54 @@ namespace BlendShapeEditor
 			_fillTool.Adjacency = _smoothTool.Adjacency;
 			Window.VertexCount = mesh.vertexCount;
 			ActivateHighlight(mesh.vertexCount);
+			RebuildWeldGroups();
+		}
+
+		private void RebuildWeldGroups()
+		{
+			if (Window == null || !Window.WeldEnabled || SelectionTool == null)
+				return;
+			_weldGroups.Rebuild(SelectionTool.CachedVertices, SelectionTool.Grid, BSE.WeldRadius.Value);
+			int vertexCount = SelectionTool.CachedVertices?.Length ?? 0;
+			if (_weldBlendedNormalsBuffer == null || _weldBlendedNormalsBuffer.Length != vertexCount)
+				_weldBlendedNormalsBuffer = new Vector3[vertexCount];
+			_wireColorsDirty = true;
+		}
+
+		private void ExpandWithWeldedVertices(Dictionary<int, float> affected)
+		{
+			if (Window == null || !Window.WeldEnabled || affected == null || affected.Count == 0)
+				return;
+
+			// Snapshot keys first: the loop below adds entries to `affected`, and mutating a
+			// dictionary while enumerating it throws.
+			var sourceKeys = new List<int>(affected.Keys);
+			foreach (int vertexIndex in sourceKeys)
+			{
+				if (!_weldGroups.TryGetGroup(vertexIndex, out int[] members))
+					continue;
+				float falloff = affected[vertexIndex];
+				foreach (int member in members)
+				{
+					if (!affected.TryGetValue(member, out float existing) || falloff > existing)
+						affected[member] = falloff;
+				}
+			}
+		}
+
+		private Vector3[] GetBrushNormals(Vector3[] cachedNormals, Dictionary<int, float> affectedVertices)
+		{
+			if (Window == null || !Window.WeldEnabled || _weldBlendedNormalsBuffer == null
+			    || _weldBlendedNormalsBuffer.Length != cachedNormals.Length)
+				return cachedNormals;
+
+			Array.Copy(cachedNormals, _weldBlendedNormalsBuffer, cachedNormals.Length);
+			foreach (int vertexIndex in affectedVertices.Keys)
+			{
+				if (_weldGroups.IsWelded(vertexIndex))
+					_weldBlendedNormalsBuffer[vertexIndex] = _weldGroups.GetBlendedNormal(vertexIndex, cachedNormals);
+			}
+			return _weldBlendedNormalsBuffer;
 		}
 
 		internal void DoExitEditMode()
@@ -998,6 +1064,8 @@ namespace BlendShapeEditor
 					return;
 			}
 
+			ExpandWithWeldedVertices(brushResult.AffectedVertices);
+
 			foreach (KeyValuePair<int, float> pair in brushResult.AffectedVertices.Where(pair => !_brushBeforeSnapshot.ContainsKey(pair.Key)))
 			{
 				_brushBeforeSnapshot[pair.Key] = deltas[pair.Key];
@@ -1037,7 +1105,7 @@ namespace BlendShapeEditor
 					flatten.PlaneComputed = false;
 			}
 			
-			activeTool.Apply(activeLayer, brushResult, cachedVertices, cachedNormals, cam);
+			activeTool.Apply(activeLayer, brushResult, cachedVertices, GetBrushNormals(cachedNormals, brushResult.AffectedVertices), cam);
 			_brushAffectedVertices = brushResult.AffectedVertices;
 			if (!_symmetryEnabled || !_targetRenderer)
 			{
@@ -1078,6 +1146,7 @@ namespace BlendShapeEditor
 				}
 				if (mirrorResult != null && mirrorResult.AffectedVertices.Count > 0)
 				{
+					ExpandWithWeldedVertices(mirrorResult.AffectedVertices);
 					foreach (KeyValuePair<int, float> pair in mirrorResult.AffectedVertices)
 					{
 						if (_brushBeforeSnapshot != null && !_brushBeforeSnapshot.ContainsKey(pair.Key))
@@ -1086,7 +1155,7 @@ namespace BlendShapeEditor
 					MoveTool mirrorMoveTool = activeTool as MoveTool;
 					if (mirrorMoveTool != null)
 						mirrorMoveTool.MirrorAxis = _symmetryAxis;
-					activeTool.Apply(activeLayer, mirrorResult, cachedVertices, cachedNormals, cam);
+					activeTool.Apply(activeLayer, mirrorResult, cachedVertices, GetBrushNormals(cachedNormals, mirrorResult.AffectedVertices), cam);
 					if (mirrorMoveTool != null)
 						mirrorMoveTool.MirrorAxis = -1;
 					_brushMirrorAffectedVertices = mirrorResult.AffectedVertices;
@@ -1343,14 +1412,28 @@ namespace BlendShapeEditor
 			if (_gizmo == null || SelectionTool == null)
 				return;
 			Vector3[] cachedNormals = SelectionTool.CachedNormals;
-			_gizmo.SetTarget(SelectionTool.SelectedVertices, vertices, cachedNormals);
+			HashSet<int> targetIndices = SelectionTool.SelectedVertices;
+			if (Window != null && Window.WeldEnabled)
+			{
+				var expanded = new HashSet<int>(targetIndices);
+				foreach (int idx in targetIndices)
+				{
+					if (_weldGroups.TryGetGroup(idx, out int[] members))
+					{
+						foreach (int member in members)
+							expanded.Add(member);
+					}
+				}
+				targetIndices = expanded;
+			}
+			_gizmo.SetTarget(targetIndices, vertices, cachedNormals);
 			if (_symmetryEnabled && _gizmo.HasTarget && SelectionTool.Grid != null)
 			{
 				var mirrorIndices = new HashSet<int>();
 				SpatialHashGrid grid = SelectionTool.Grid;
 				float symmetryOffset = _symmetryCenterSet ? _symmetryCenter : 0f;
 				int axis = _symmetryAxis;
-				HashSet<int> selected = SelectionTool.SelectedVertices;
+				HashSet<int> selected = targetIndices;
 				foreach (int idx in selected)
 				{
 					if (idx < 0 || idx >= vertices.Length) continue;
@@ -1518,6 +1601,9 @@ namespace BlendShapeEditor
 			Dictionary<int, float> mirrorSoftWeights = useGizmoSoftGradient && _gizmo.HasMirrorTarget ? _gizmo.MirrorSoftWeights : null;
 			Dictionary<int, float> brushAffected = inBrushMode ? _brushAffectedVertices : null;
 			Dictionary<int, float> brushMirrorAffected = inBrushMode ? _brushMirrorAffectedVertices : null;
+			bool weldEnabled = Window != null && Window.WeldEnabled;
+			bool showWeldColor = weldEnabled && BSE.ShowWeldedVertexColor.Value;
+			int[] hoverWeldGroup = weldEnabled && _hoverVertexIndex >= 0 && _weldGroups.TryGetGroup(_hoverVertexIndex, out int[] hg) ? hg : null;
 			ShapeEditorWindow.VertexDisplayType displayMode = Window != null ? Window.VertexDisplayMode : ShapeEditorWindow.VertexDisplayType.All;
 			bool hideOccludedDots = displayMode == ShapeEditorWindow.VertexDisplayType.BackfaceCulling
 				&& _vertexVisible != null && _vertexVisible.Length == _wireVerts.Length;
@@ -1525,8 +1611,10 @@ namespace BlendShapeEditor
 			GL.Begin(4); // triangles
 			for (var i = 0; i < _wireVerts.Length; i++)
 			{
+				bool isHovered = i == _hoverVertexIndex
+					|| (hoverWeldGroup != null && Array.IndexOf(hoverWeldGroup, i) >= 0);
 				bool isInteracting = (selectedVerts != null && selectedVerts.Contains(i))
-					|| i == _hoverVertexIndex
+					|| isHovered
 					|| (primarySoftWeights != null && primarySoftWeights.ContainsKey(i))
 					|| (mirrorSoftWeights != null && mirrorSoftWeights.ContainsKey(i))
 					|| (brushAffected != null && brushAffected.ContainsKey(i))
@@ -1537,7 +1625,7 @@ namespace BlendShapeEditor
 					continue;
 				Vector3 c = _wireVerts[i];
 				Color col;
-				if (i == _hoverVertexIndex)
+				if (isHovered)
 					col = BSE.VertexColorHover.Value;
 				else if (primarySoftWeights != null && primarySoftWeights.TryGetValue(i, out float gw))
 					col = WeightGradient.Evaluate(gw);
@@ -1549,6 +1637,8 @@ namespace BlendShapeEditor
 					col = WeightGradient.Evaluate(weight);
 				else if (brushMirrorAffected != null && brushMirrorAffected.TryGetValue(i, out float mWeight))
 					col = MirrorWeightGradient.Evaluate(mWeight);
+				else if (showWeldColor && _weldGroups.IsWelded(i))
+					col = BSE.VertexColorWelded.Value;
 				else
 					col = BSE.VertexColorDefault.Value;
 				GL.Color(col);
@@ -1577,15 +1667,17 @@ namespace BlendShapeEditor
 			HashSet<int> mirrorVerts = inGizmoMode && _symmetryEnabled && _gizmo != null && _gizmo.HasMirrorTarget ? _gizmo.MirrorIndices : null;
 			bool hasSelection = selectedVerts != null && selectedVerts.Count > 0;
 			bool hasMirror = mirrorVerts != null && mirrorVerts.Count > 0;
+			bool showWeldColor = Window.WeldEnabled && BSE.ShowWeldedVertexColor.Value;
 			ShapeEditorWindow.WireframeDisplayType wireDisplayMode = Window.WireframeDisplayMode;
-			if (_wireColorsDirty || useSoftColors != _prevUseSoftColors || useBrushColors != _prevUseBrushColors || hasMirror != _prevHasMirror || wireDisplayMode != _prevWireframeDisplayMode || _wireColors == null || _wireColors.Length != _wireVerts.Length)
+			if (_wireColorsDirty || useSoftColors != _prevUseSoftColors || useBrushColors != _prevUseBrushColors || hasMirror != _prevHasMirror || wireDisplayMode != _prevWireframeDisplayMode || showWeldColor != _prevShowWeldColor || _wireColors == null || _wireColors.Length != _wireVerts.Length)
 			{
-				RebuildWireColors(useSoftColors, useBrushColors, hasSelection ? selectedVerts : null, hasMirror ? mirrorVerts : null);
+				RebuildWireColors(useSoftColors, useBrushColors, showWeldColor, hasSelection ? selectedVerts : null, hasMirror ? mirrorVerts : null);
 				_wireColorsDirty = false;
 				_prevUseSoftColors = useSoftColors;
 				_prevUseBrushColors = useBrushColors;
 				_prevHasMirror = hasMirror;
 				_prevWireframeDisplayMode = wireDisplayMode;
+				_prevShowWeldColor = showWeldColor;
 			}
 			// Cull results were computed in LateUpdate; use them directly
 			int writeIdx = _culledVisibleCount;
@@ -1607,7 +1699,7 @@ namespace BlendShapeEditor
 			Graphics.DrawMeshNow(_wireLineMesh, Matrix4x4.identity);
 		}
 
-		private void RebuildWireColors(bool useSoftColors, bool useBrushColors, HashSet<int> selectedVerts, HashSet<int> mirrorVerts)
+		private void RebuildWireColors(bool useSoftColors, bool useBrushColors, bool showWeldColor, HashSet<int> selectedVerts, HashSet<int> mirrorVerts)
 		{
 			int count = _wireVerts.Length;
 			if (_wireColors == null || _wireColors.Length != count)
@@ -1615,6 +1707,9 @@ namespace BlendShapeEditor
 			Color32 defCol = BSE.WireColorDefault.Value;
 			if (Window != null && Window.WireframeDisplayMode == ShapeEditorWindow.WireframeDisplayType.Interact)
 				defCol.a = 0;
+			Color32 weldedDefCol = showWeldColor ? (Color32)BSE.VertexColorWelded.Value : defCol;
+			if (showWeldColor && Window != null && Window.WireframeDisplayMode == ShapeEditorWindow.WireframeDisplayType.Interact)
+				weldedDefCol.a = 0;
 			if (useSoftColors)
 			{
 				Dictionary<int, float> primary = _gizmo.PrimarySoftWeights;
@@ -1625,6 +1720,8 @@ namespace BlendShapeEditor
 						_wireColors[i] = WeightGradient.Evaluate(w);
 					else if (mirror != null && mirror.TryGetValue(i, out float mw))
 						_wireColors[i] = MirrorWeightGradient.Evaluate(mw);
+					else if (showWeldColor && _weldGroups.IsWelded(i))
+						_wireColors[i] = weldedDefCol;
 					else
 						_wireColors[i] = defCol;
 				}
@@ -1640,6 +1737,8 @@ namespace BlendShapeEditor
 						_wireColors[i] = WeightGradient.Evaluate(w);
 					else if (mirror != null && mirror.TryGetValue(i, out float mw))
 						_wireColors[i] = MirrorWeightGradient.Evaluate(mw);
+					else if (showWeldColor && _weldGroups.IsWelded(i))
+						_wireColors[i] = weldedDefCol;
 					else
 						_wireColors[i] = defCol;
 				}
@@ -1655,6 +1754,8 @@ namespace BlendShapeEditor
 					_wireColors[j] = selCol;
 				else if (hasMirror && mirrorVerts.Contains(j))
 					_wireColors[j] = mirCol;
+				else if (showWeldColor && _weldGroups.IsWelded(j))
+					_wireColors[j] = weldedDefCol;
 				else
 					_wireColors[j] = defCol;
 			}
@@ -1978,6 +2079,7 @@ namespace BlendShapeEditor
 
 		private void OnDestroy()
 		{
+			_activeInstances.Remove(this);
 			DeactivateHighlight();
 			SelectionTool?.CleanupCollider();
 			Input?.Cleanup();
@@ -2026,6 +2128,9 @@ namespace BlendShapeEditor
 		private FillTool _fillTool;
 		private FlattenTool _flattenTool;
 		private TransformGizmo _gizmo;
+		private readonly WeldGroups _weldGroups = new WeldGroups();
+		private Vector3[] _weldBlendedNormalsBuffer;
+		private static readonly List<ShapePaintOverlay> _activeInstances = new List<ShapePaintOverlay>();
 		private Material _cursorMaterial;
 		private Vector3 _lastHitPoint;
 		private Vector3 _lastHitNormal;
@@ -2068,6 +2173,7 @@ namespace BlendShapeEditor
 		private bool _prevUseSoftColors;
 		private bool _prevUseBrushColors;
 		private bool _prevHasMirror;
+		private bool _prevShowWeldColor;
 		private ShapeEditorWindow.WireframeDisplayType _prevWireframeDisplayMode;
 		// Cull results computed in LateUpdate, consumed in OnRenderObject
 		private int _culledVisibleCount;
