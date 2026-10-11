@@ -24,7 +24,6 @@
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\InflateTool.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\LayerTool.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\MoveTool.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\SelectionTool.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\SmoothTool.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\BlendShapeCreatorBridge.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\BlendShapeEditorCharaController.cs" />
@@ -40,6 +39,8 @@
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Hooks.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\i18n\i18nKeyAttribute.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\MeshHelper.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Session\EditPart.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Session\EditSession.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\ShapeDeformer.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\BlendShapeEditorPlugin.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\SpatialHashGrid.cs" />

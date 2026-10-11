@@ -22,6 +22,23 @@ namespace BlendShapeEditor
 			return data;
 		}
 
+		/// Layer stack shared by a set of renderers edited together. Sorts `renderers` in place by path:
+		/// the shared deltas are laid out part after part in that order, so callers must use it as-is.
+		public DeformData GetOrCreateDeformData(List<Renderer> renderers)
+		{
+			if (renderers == null || renderers.Count == 0)
+				return null;
+			foreach (Renderer r in renderers)
+				if (!r) return null;
+			if (renderers.Count == 1)
+				return GetOrCreateDeformData(renderers[0]);
+			string key = DeformDataKeys.SortAndBuildKey(RootTransform, renderers);
+			if (_deformDataMap.TryGetValue(key, out DeformData data)) return data;
+			data = new DeformData(key);
+			_deformDataMap[key] = data;
+			return data;
+		}
+
 		public DeformData GetDeformData(Renderer renderer)
 		{
 			if (!renderer)

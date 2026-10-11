@@ -49,14 +49,6 @@ namespace BlendShapeEditor
 			}, alphaKeys);
 		}
 
-		public void SetTarget(Renderer renderer)
-		{
-			_targetRenderer = renderer;
-			_deformer = renderer ? renderer.GetComponent<ShapeDeformer>() : null;
-			if (_gizmo != null)
-				_gizmo.Deformer = _deformer;
-		}
-
 		private void Awake()
 		{
 			_activeInstances.Add(this);
@@ -118,6 +110,8 @@ namespace BlendShapeEditor
 				Window.DeferRebuildWeldGroups = false;
 				RebuildWeldGroups();
 			}
+			if (_adjacencyHasWeldBridges && !Window.WeldEnabled)
+				RebuildAdjacency();
 			if (Window.DeferEnterEditMode)
 			{
 				Window.DeferEnterEditMode = false;
@@ -157,7 +151,7 @@ namespace BlendShapeEditor
 					Window.ActiveDeformData.MoveLayerUp(layerMoveUpIdx);
 					_undoStack?.Push(new LayerReorderUndoEntry(Window.ActiveDeformData, true));
 					StudioUndoBridge.PushDummy(this);
-					_deformer?.InvalidateDeltaCache();
+					_session.InvalidateDeltaCaches();
 				}
 			}
 			if (Window.DeferLayerMoveDown >= 0)
@@ -169,7 +163,7 @@ namespace BlendShapeEditor
 					Window.ActiveDeformData.MoveLayerDown(layerMoveDownIdx);
 					_undoStack?.Push(new LayerReorderUndoEntry(Window.ActiveDeformData, false));
 					StudioUndoBridge.PushDummy(this);
-					_deformer?.InvalidateDeltaCache();
+					_session.InvalidateDeltaCaches();
 				}
 			}
 			if (Window.WeightUndoLayer >= 0)
@@ -206,7 +200,7 @@ namespace BlendShapeEditor
 				_symmetryCenterSet = false;
 			}
 
-			if (Window.DeferCheckNameAvailability && _deformer)
+			if (Window.DeferCheckNameAvailability && _session.HasTarget)
 			{
 				if (Window.ActiveDeformData?.EditingExistingShapeName != null)
 				{
@@ -217,14 +211,14 @@ namespace BlendShapeEditor
 					BSE.Logger.LogDebug("Checking Name Availability");
 					if (!Window.BakeSeparate)
 					{
-						Window.BakeNamingIssues = _deformer.ExistingBlendShapeNames.Contains(Window.BakeShapeName) ? Window.BakeShapeName : null;
+						Window.BakeNamingIssues = AnyPartHasShape(Window.BakeShapeName) ? Window.BakeShapeName : null;
 					}
 					else
 					{
 						var badNames = new List<string>();
 						foreach (DeformLayer deformLayer in Window.ActiveDeformData.Layers)
 						{
-							if (_deformer.ExistingBlendShapeNames.Contains(Window.BakeShapeName + "_" + deformLayer.Name))
+							if (AnyPartHasShape(Window.BakeShapeName + "_" + deformLayer.Name))
 							{
 								badNames.Add(Window.BakeShapeName + "_" + deformLayer.Name);
 							}
@@ -241,16 +235,38 @@ namespace BlendShapeEditor
 				DoBake();
 			}
 
-			if (_deformer)
+			if (_session.HasTarget)
 			{
 				bool isEditingExisting = Window.ActiveDeformData?.EditingExistingShapeName != null;
-				_deformer.SyncPreviewWithLiveWeight = isEditingExisting && Window.SyncPreviewWithLiveWeight;
-				if (!_deformer.SyncPreviewWithLiveWeight)
-					_deformer.PreviewMultiplier = Window.PreviewWeight;
-				else
+				bool sync = isEditingExisting && Window.SyncPreviewWithLiveWeight;
+				// Parts that have the edited shape follow their own live weight (in LateUpdate); the first of
+				// them drives the label, and parts without the shape follow the label.
+				ShapeDeformer syncSource = null;
+				foreach (EditPart part in _session.Parts)
+				{
+					if (!part.Deformer)
+						continue;
+					part.Deformer.SyncPreviewWithLiveWeight = sync && part.Deformer.IsEditingExistingShape;
+					if (part.Deformer.SyncPreviewWithLiveWeight && !syncSource)
+						syncSource = part.Deformer;
+				}
+				if (syncSource)
 					// Label display only; the mesh itself is already synced in LateUpdate.
-					Window.PreviewWeight = _deformer.PreviewMultiplier;
+					Window.PreviewWeight = syncSource.PreviewMultiplier;
+				foreach (EditPart part in _session.Parts)
+				{
+					if (part.Deformer && !part.Deformer.SyncPreviewWithLiveWeight)
+						part.Deformer.PreviewMultiplier = Window.PreviewWeight;
+				}
 			}
+		}
+
+		private bool AnyPartHasShape(string shapeName)
+		{
+			foreach (EditPart part in _session.Parts)
+				if (part.Deformer && part.Deformer.HasBlendShape(shapeName))
+					return true;
+			return false;
 		}
 		
 		// private Animator _animatorTurnedOff = null;
@@ -258,23 +274,19 @@ namespace BlendShapeEditor
 		{
 			if (Window.Renderers.Count == 0)
 				return;
-			Renderer renderer = Window.SelectedRenderer;
-			if (!renderer)
+			List<Renderer> selected = Window.GetSelectedRenderers();
+			if (selected.Count == 0)
 				return;
-			DeformData deformData = GetDeformDataForRenderer(renderer, out bool studioMode);
-			ShapeDeformer deformer = renderer.GetComponent<ShapeDeformer>();
-			if (!deformer)
-				deformer = renderer.gameObject.AddComponent<ShapeDeformer>();
-			if (deformData != null)
-			{
-				deformer.StudioMode = studioMode;
-				deformer.DeformData = deformData;
-			}
-			Window.PreviewWeight = 1f;
-			Window.SyncPreviewWithLiveWeight = false;
-			deformer.PreviewMultiplier = 1f;
+			EnterEditMode(selected);
+		}
 
-			renderer.TryGetOwningController(out Object controller);
+		private void EnterEditMode(List<Renderer> renderers)
+		{
+			// Sorts `renderers` by path; the parts below must stay in that order to match the shared layer layout.
+			DeformData deformData = GetDeformDataForRenderers(renderers, out bool studioMode);
+			// The layer stack outlives edit sessions; start each one from a freshly summed preview.
+			deformData?.InvalidateDisplayDelta();
+			renderers[0].TryGetOwningController(out Object controller);
 			// seems we actually don't need to disable the animator after all
 			/*
 			if (controller is BlendShapeEditorCharaController charaController)
@@ -292,36 +304,67 @@ namespace BlendShapeEditor
 				}
 			}
 			*/
-			
-			switch (renderer)
+
+			var parts = new List<EditPart>();
+			foreach (Renderer renderer in renderers)
 			{
-				case SkinnedMeshRenderer smr:
-					deformer.Init(smr);
-					break;
-				case MeshRenderer mr:
+				ShapeDeformer deformer = renderer.GetComponent<ShapeDeformer>();
+				if (!deformer)
+					deformer = renderer.gameObject.AddComponent<ShapeDeformer>();
+				if (deformData != null)
 				{
-					MeshFilter mf = renderer.GetComponent<MeshFilter>();
-					if (mf && mr) deformer.Init(mf, mr);
-					break;
+					deformer.StudioMode = studioMode;
+					deformer.DeformData = deformData;
 				}
-			}
-			SetTarget(renderer);
-			Window.ActiveDeformData = deformData;
-			Window.SetEditMode(true);
-			if (SelectionTool != null)
-			{
+				deformer.PreviewMultiplier = 1f;
 				switch (renderer)
 				{
 					case SkinnedMeshRenderer smr:
-						SelectionTool.SetTarget(smr);
+						deformer.Init(smr);
 						break;
 					case MeshRenderer mr:
 					{
-						MeshFilter mf = mr.GetComponent<MeshFilter>();
-						if (mf) SelectionTool.SetTarget(mf);
+						MeshFilter mf = renderer.GetComponent<MeshFilter>();
+						if (mf && mr) deformer.Init(mf, mr);
 						break;
 					}
 				}
+				parts.Add(EditPart.Create(renderer, deformer));
+			}
+			Window.PreviewWeight = 1f;
+			Window.SyncPreviewWithLiveWeight = false;
+			Window.ActiveDeformData = deformData;
+			Window.SetEditMode(true);
+			Transform objectRoot = null;
+			switch (controller)
+			{
+				case BlendShapeEditorCharaController charCtrl:
+					objectRoot = charCtrl.RootTransform;
+					break;
+				case BlendShapeEditorItemController itemCtrl:
+					objectRoot = itemCtrl.RootTransform;
+					break;
+			}
+			_session.Begin(parts, objectRoot);
+			if (_session.Parts.Count != renderers.Count)
+			{
+				// A missing part would shift every later part's slice of the shared layer deltas.
+				BSE.Logger.LogError("ShapePaintOverlay.EnterEditMode() -> could not set up every selected renderer");
+				DoExitEditMode();
+				// DoExitEditMode only removes deformers of parts that made it into the session.
+				foreach (Renderer renderer in renderers)
+				{
+					ShapeDeformer leftover = renderer ? renderer.GetComponent<ShapeDeformer>() : null;
+					if (leftover)
+						DestroyImmediate(leftover);
+				}
+				return;
+			}
+			bool shared = _session.Parts.Count > 1;
+			foreach (EditPart part in _session.Parts)
+			{
+				part.Deformer.DeltaOffset = part.Offset;
+				part.Deformer.DeltaTotalCount = shared ? _session.VertexCount : -1;
 			}
 			_undoStack = new UndoStack(BlendShapeEditorPlugin.UndoMaxSteps.Value);
 			if (_moveTool == null)
@@ -343,18 +386,7 @@ namespace BlendShapeEditor
 			_flattenTool = new FlattenTool();
 			if (_gizmo == null)
 				_gizmo = new TransformGizmo();
-			_gizmo.Deformer = _deformer;
-			Transform objectRoot = null;
-			
-			switch (controller)
-			{
-				case BlendShapeEditorCharaController charCtrl:
-					objectRoot = charCtrl.RootTransform;
-					break;
-				case BlendShapeEditorItemController itemCtrl:
-					objectRoot = itemCtrl.RootTransform;
-					break;
-			}
+			_gizmo.Session = _session;
 
 			if (!objectRoot)
 			{
@@ -363,23 +395,53 @@ namespace BlendShapeEditor
 				return;
 			}
 			_gizmo.SetObjectRoot(objectRoot);
-			Mesh mesh = MeshHelper.GetMesh(renderer);
-			if (!mesh) return;
-			_smoothTool.BuildAdjacency(mesh.triangles, mesh.vertexCount, mesh.vertices);
-			Window.VertexCount = mesh.vertexCount;
-			ActivateHighlight(mesh.vertexCount);
+			if (_session.RestTriangles == null) return;
+			RebuildAdjacency();
+			Window.VertexCount = _session.VertexCount;
+			ActivateHighlight(_session.VertexCount);
 			RebuildWeldGroups();
 		}
 
 		private void RebuildWeldGroups()
 		{
-			if (Window == null || !Window.WeldEnabled || SelectionTool == null)
+			if (Window == null || !Window.WeldEnabled || !_session.HasTarget)
 				return;
-			_weldGroups.Rebuild(SelectionTool.CachedVertices, SelectionTool.Grid, BSE.WeldRadius.Value);
-			int vertexCount = SelectionTool.CachedVertices?.Length ?? 0;
+			_weldGroups.Rebuild(_session.Positions, _session.Grid, BSE.WeldRadius.Value);
+			int vertexCount = _session.Positions?.Length ?? 0;
 			if (_weldBlendedNormalsBuffer == null || _weldBlendedNormalsBuffer.Length != vertexCount)
 				_weldBlendedNormalsBuffer = new Vector3[vertexCount];
 			_wireColorsDirty = true;
+			if (_session.Parts.Count > 1)
+				RebuildAdjacency();
+		}
+
+		/// Mesh adjacency for Smooth/Fill and surface soft selection. With several renderers, colocated
+		/// links stay within each mesh (their bind spaces are unrelated), and while welding is on, weld
+		/// groups spanning two meshes become bridge edges so the surface continues across the seam.
+		private void RebuildAdjacency()
+		{
+			if (_smoothTool == null || _session.RestTriangles == null)
+				return;
+			bool multiPart = _session.Parts.Count > 1;
+			_smoothTool.BuildAdjacency(_session.RestTriangles, _session.VertexCount, _session.RestPositions,
+				multiPart ? _session.PartIndexOfVertex : null);
+			_adjacencyHasWeldBridges = false;
+			if (!multiPart)
+				return;
+			if (Window != null && Window.WeldEnabled)
+			{
+				int[] partOf = _session.PartIndexOfVertex;
+				_weldGroups.ForEachGroup(members =>
+				{
+					for (var i = 0; i < members.Length; i++)
+					for (int j = i + 1; j < members.Length; j++)
+						if (partOf[members[i]] != partOf[members[j]])
+							_smoothTool.Link(members[i], members[j]);
+				});
+				_adjacencyHasWeldBridges = true;
+			}
+			_softWeightsDirty = true;
+			_softWeightsDirtyTime = Time.unscaledTime;
 		}
 
 		private void ExpandWithWeldedVertices(Dictionary<int, float> affected)
@@ -425,17 +487,18 @@ namespace BlendShapeEditor
 				_gizmo.EndDrag();
 			_gizmo?.SetObjectRoot(null);
 			DeactivateHighlight();
-			SelectionTool?.CleanupCollider();
-			if (_deformer)
+			foreach (EditPart part in _session.Parts)
 			{
-				_deformer.RestoreEditedShapeWeight();
-				DestroyImmediate(_deformer);
+				if (!part.Deformer)
+					continue;
+				part.Deformer.RestoreEditedShapeWeight();
+				DestroyImmediate(part.Deformer);
 			}
+			_session.Clear();
 			// Imported layers only make sense while actively editing that specific existing shape —
 			// don't let them linger for the next time this renderer enters edit mode.
 			if (Window.ActiveDeformData?.EditingExistingShapeName != null)
 				Window.ActiveDeformData.ClearLayers();
-			SetTarget(null);
 			Window.ActiveDeformData = null;
 			Window.SetEditMode(false);
 			_wireVerts = null;
@@ -443,17 +506,11 @@ namespace BlendShapeEditor
 			_edges = null;
 			_wireColors = null;
 			_lineIndexBuffer = null;
-			_visibleLineIndices = null;
-			_prevVisibleCount = -1;
 			_culledVisibleCount = 0;
 			_hoverVertexIndex = -1;
 			_vertsUploadDirty = true;
-			_prevL2W = Matrix4x4.zero;
-			if (_wireLineMesh)
-			{
-				Destroy(_wireLineMesh);
-				_wireLineMesh = null;
-			}
+			_wireMeshIds = null;
+			DestroyWireParts();
 			StudioUndoBridge.ClearBSECommands();
 			_undoStack = null;
 			_isBrushing = false;
@@ -474,11 +531,10 @@ namespace BlendShapeEditor
 
 		private void DoBake()
 		{
-			if (!_deformer || !(_targetRenderer is SkinnedMeshRenderer smr))
+			DeformData data = Window.ActiveDeformData;
+			if (!_session.HasTarget || data == null || !data.HasLayers)
 				return;
-			if (Window.ActiveDeformData == null || !Window.ActiveDeformData.HasLayers)
-				return;
-			string existingShapeName = Window.ActiveDeformData.EditingExistingShapeName;
+			string existingShapeName = data.EditingExistingShapeName;
 			bool isUpdate = existingShapeName != null;
 			string prefix = Window.BakeShapeName;
 			if (string.IsNullOrEmpty(prefix))
@@ -486,7 +542,7 @@ namespace BlendShapeEditor
 
 			if (Window.BakeSeparate && !isUpdate)
 			{
-				var layers = new List<DeformLayer>(Window.ActiveDeformData.Layers);
+				var layers = new List<DeformLayer>(data.Layers);
 				foreach (DeformLayer layer in layers)
 				{
 					if (layer?.Deltas == null)
@@ -502,39 +558,85 @@ namespace BlendShapeEditor
 						for (var i = 0; i < scaled.Length; i++)
 							scaled[i] = layer.Deltas[i] * layer.Weight;
 					}
-					var shapeName = $"{prefix}_{layer.Name}";
-					if (!_deformer.BakeToBlendShape(shapeName, scaled, out Vector3[] deltaVerts, out Vector3[] deltaNormals, Window.BakeCalcNormals))
-					{
-						BSE.Logger.LogWarning($"DoBake: skipping layer '{layer.Name}' — bake failed");
-						continue;
-					}
-					if (!RegisterBakedShape(smr, shapeName, deltaVerts, deltaNormals, 100f))
+					if (!BakeParts($"{prefix}_{layer.Name}", scaled, false))
 						return;
 				}
 			}
 			else if (isUpdate)
 			{
-				if (!_deformer.BakeToBlendShape(existingShapeName, out Vector3[] deltaVerts, out Vector3[] deltaNormals, Window.BakeCalcNormals))
-					return;
-				if (!UpdateBakedShape(smr, existingShapeName, deltaVerts, deltaNormals))
+				if (!BakeParts(existingShapeName, data.ComputeFinalDelta(), true))
 					return;
 			}
 			else
 			{
-				if (!_deformer.BakeToBlendShape(prefix, out Vector3[] deltaVerts, out Vector3[] deltaNormals, Window.BakeCalcNormals))
-					return;
-				if (!RegisterBakedShape(smr, prefix, deltaVerts, deltaNormals, 100f))
+				if (!BakeParts(prefix, data.ComputeFinalDelta(), false))
 					return;
 				Window.IncrementBakeShapeName();
 			}
 
-			Window.ActiveDeformData.ClearLayers();
+			data.ClearLayers();
 			DoExitEditMode();
+		}
+
+		/// Bakes each skinned part's slice of `combined` under the same shape name, so one slider drives them
+		/// all. With several parts, parts the edit never touched are skipped for a new shape. When updating an
+		/// existing shape, parts that have it are updated and parts that don't get it registered if edited.
+		/// Returns false if registering with BlendShapeCreator failed (the bake is aborted).
+		private bool BakeParts(string shapeName, Vector3[] combined, bool isUpdate)
+		{
+			if (combined == null || combined.Length != _session.VertexCount)
+			{
+				BSE.Logger.LogWarning(
+					$"DoBake: delta length mismatch (delta={combined?.Length ?? 0}, verts={_session.VertexCount}) - not baking '{shapeName}'");
+				return false;
+			}
+			bool multiPart = _session.Parts.Count > 1;
+			// A part that gains the shape during an update starts at the weight the shape currently has.
+			var newShapeWeight = 100f;
+			if (isUpdate)
+			{
+				foreach (EditPart part in _session.Parts)
+				{
+					if (!part.Deformer || !part.Deformer.IsEditingExistingShape)
+						continue;
+					newShapeWeight = part.Deformer.LiveExternalWeight;
+					break;
+				}
+			}
+			foreach (EditPart part in _session.Parts)
+			{
+				if (!(part.Renderer is SkinnedMeshRenderer smr) || !part.Deformer)
+					continue;
+				var slice = new Vector3[part.VertexCount];
+				Array.Copy(combined, part.Offset, slice, 0, slice.Length);
+				bool hasShape = isUpdate && part.Deformer.HasBlendShape(shapeName);
+				if (multiPart && !hasShape && IsAllZero(slice))
+					continue;
+				if (!part.Deformer.BakeToBlendShape(shapeName, slice, out Vector3[] deltaVerts, out Vector3[] deltaNormals, Window.BakeCalcNormals))
+				{
+					BSE.Logger.LogWarning($"DoBake: skipping '{smr.name}' for '{shapeName}' - bake failed");
+					continue;
+				}
+				bool registered = hasShape
+					? UpdateBakedShape(smr, shapeName, deltaVerts, deltaNormals)
+					: RegisterBakedShape(smr, shapeName, deltaVerts, deltaNormals, isUpdate ? newShapeWeight : 100f);
+				if (!registered)
+					return false;
+			}
+			return true;
+		}
+
+		private static bool IsAllZero(Vector3[] deltas)
+		{
+			foreach (Vector3 d in deltas)
+				if (d.x != 0f || d.y != 0f || d.z != 0f)
+					return false;
+			return true;
 		}
 
 		private bool RegisterBakedShape(SkinnedMeshRenderer smr, string shapeName, Vector3[] deltaVerts, Vector3[] deltaNormals, float weight)
 		{
-			if (!_deformer.TryGetOwningController(out Object controller))
+			if (!smr.TryGetOwningController(out Object controller))
 			{
 				BSE.Logger.LogError("Could not bake and register Blendshape");
 				BSE.Logger.LogError("ShapePaintOverlay.RegisterBakedShape() -> Controller is null");
@@ -563,7 +665,7 @@ namespace BlendShapeEditor
 
 		private bool UpdateBakedShape(SkinnedMeshRenderer smr, string shapeName, Vector3[] deltaVerts, Vector3[] deltaNormals)
 		{
-			if (!_deformer.TryGetOwningController(out Object controller))
+			if (!smr.TryGetOwningController(out Object controller))
 			{
 				BSE.Logger.LogError("Could not bake and update Blendshape");
 				BSE.Logger.LogError("ShapePaintOverlay.UpdateBakedShape() -> Controller is null");
@@ -616,33 +718,55 @@ namespace BlendShapeEditor
 					return;
 				Window.ActiveDeformData = deformData;
 			}
-			Mesh mesh = MeshHelper.GetMesh(GetCurrentRenderer());
-			if (!mesh)
-				return;
-			DeformLayer layer = Window.ActiveDeformData.AddLayer(mesh.vertexCount);
+			int vertexCount;
+			if (_session.HasTarget)
+			{
+				vertexCount = _session.VertexCount;
+			}
+			else
+			{
+				Mesh mesh = MeshHelper.GetMesh(GetCurrentRenderer());
+				if (!mesh)
+					return;
+				vertexCount = mesh.vertexCount;
+			}
+			DeformLayer layer = Window.ActiveDeformData.AddLayer(vertexCount);
 			_undoStack?.Push(new LayerAddUndoEntry(Window.ActiveDeformData, layer, Window.ActiveDeformData.Layers.Count - 1));
 			StudioUndoBridge.PushDummy(this);
 		}
 
 		private void DoImportExistingShape(string shapeName)
 		{
-			if (!_deformer || !(_targetRenderer is SkinnedMeshRenderer) || Window.ActiveDeformData == null)
+			DeformData data = Window.ActiveDeformData;
+			if (!_session.HasTarget || data == null)
 				return;
-			DeformLayer layer = _deformer.ImportBlendShapeAsLayer(shapeName);
-			if (layer == null)
+			var layer = new DeformLayer(shapeName, _session.VertexCount) { Weight = 1f };
+			ShapeDeformer firstImported = null;
+			foreach (EditPart part in _session.Parts)
+			{
+				if (!part.Deformer || !part.Deformer.HasBlendShape(shapeName))
+					continue;
+				DeformLayer partLayer = part.Deformer.ImportBlendShapeAsLayer(shapeName);
+				if (partLayer == null)
+					continue;
+				Array.Copy(partLayer.Deltas, 0, layer.Deltas, part.Offset, Mathf.Min(partLayer.Deltas.Length, part.VertexCount));
+				if (!firstImported)
+					firstImported = part.Deformer;
+			}
+			if (!firstImported)
 			{
 				BSE.Logger.LogWarning($"DoImportExistingShape: could not import '{shapeName}'");
 				return;
 			}
-			Window.ActiveDeformData.Layers.Add(layer);
-			Window.ActiveDeformData.ActiveLayerIndex = Window.ActiveDeformData.Layers.Count - 1;
-			Window.ActiveDeformData.EditingExistingShapeName = shapeName;
-			_undoStack?.Push(new LayerAddUndoEntry(Window.ActiveDeformData, layer, Window.ActiveDeformData.Layers.Count - 1));
+			data.Layers.Add(layer);
+			data.ActiveLayerIndex = data.Layers.Count - 1;
+			data.EditingExistingShapeName = shapeName;
+			_undoStack?.Push(new LayerAddUndoEntry(data, layer, data.Layers.Count - 1));
 			StudioUndoBridge.PushDummy(this);
 			Window.SetBakeName(shapeName);
 			// Start the preview at the shape's pre-edit weight, synced live by default.
 			Window.SyncPreviewWithLiveWeight = true;
-			Window.PreviewWeight = Mathf.Clamp01(_deformer.LiveExternalWeight / 100f);
+			Window.PreviewWeight = Mathf.Clamp01(firstImported.LiveExternalWeight / 100f);
 		}
 
 		private void DoLayerRemove(int layerIndex)
@@ -660,11 +784,11 @@ namespace BlendShapeEditor
 				_undoStack.Push(new LayerRemoveUndoEntry(data, removedLayer, layerIndex, prevActiveIdx));
 				StudioUndoBridge.PushDummy(this);
 			}
-			_deformer?.InvalidateDeltaCache();
+			_session.InvalidateDeltaCaches();
 			if (Window.ActiveDeformData.ActiveLayer == null)
 			{
 				_gizmo?.SetTarget(null, null, null);
-				SelectionTool?.ClearSelection();
+				_session.ClearSelection();
 			}
 			else if (_gizmo != null && _gizmo.HasTarget)
 			{
@@ -677,6 +801,24 @@ namespace BlendShapeEditor
 			if (Window == null || Window.Renderers.Count == 0)
 				return null;
 			return Window.SelectedRenderer;
+		}
+
+		/// Sorts `renderers` by path (the shared layer layout order) and returns their shared layer stack.
+		private static DeformData GetDeformDataForRenderers(List<Renderer> renderers, out bool studioMode)
+		{
+			switch (renderers[0].TryGetOwningController(out Object controller))
+			{
+				case true when controller is BlendShapeEditorCharaController charaController:
+					studioMode = false;
+					return charaController.GetOrCreateDeformData(renderers);
+				case true when controller is BlendShapeEditorItemController itemController:
+					studioMode = true;
+					return itemController.GetOrCreateDeformData(renderers);
+				default:
+					studioMode = false;
+					BlendShapeEditorPlugin.Logger.LogError("Could not get deform data for renderers");
+					return null;
+			}
 		}
 
 		private static DeformData GetDeformDataForRenderer(Renderer renderer, out bool studioMode)
@@ -701,7 +843,7 @@ namespace BlendShapeEditor
 		/// regardless of which direction the vertex was actually dragged.
 		private void RunSkinningDiagnostic(Transform targetTransform)
 		{
-			if (!_deformer)
+			if (!_session.HasTarget)
 			{
 				BlendShapeEditorPlugin.Logger.LogWarning("[Diag] no deformer on target renderer");
 				return;
@@ -728,7 +870,9 @@ namespace BlendShapeEditor
 				foreach (Vector3 axis in axes)
 				{
 					Vector3 worldDisp = (targetTransform ? targetTransform.TransformDirection(axis) : axis) * probe;
-					_deformer.LogSkinningDiagnostic(idx, worldDisp, targetTransform);
+					EditPart part = _session.GetPart(idx, out int localIdx);
+					if (part != null && part.Deformer)
+						part.Deformer.LogSkinningDiagnostic(localIdx, worldDisp, part.Transform);
 				}
 				logged++;
 			}
@@ -738,13 +882,13 @@ namespace BlendShapeEditor
 
 		private void LateUpdate()
 		{
-			if (!_targetRenderer || SelectionTool == null)
+			if (!_session.HasTarget)
 				return;
 			if (Window == null || !Window.IsEditMode)
 				return;
-			if (_deformer && _deformer.DisplayMesh)
+			if (_session.AllPartsLive)
 			{
-				SelectionTool.RefreshCollider(_deformer.DisplayMesh);
+				_session.RefreshFromDisplayMeshes();
 				RefreshWireframe();
 			}
 			else
@@ -753,23 +897,23 @@ namespace BlendShapeEditor
 				if (_refreshTimer >= 0.5f)
 				{
 					_refreshTimer = 0f;
-					SelectionTool.RefreshCollider();
+					_session.RefreshByBaking();
 					RefreshWireframe();
 				}
 			}
 			if (_deferGizmoCentroidRefresh)
 			{
 				_deferGizmoCentroidRefresh = false;
-				Vector3[] cachedVertices = SelectionTool.CachedVertices;
+				Vector3[] cachedVertices = _session.Positions;
 				if (_gizmo != null && cachedVertices != null)
 					_gizmo.UpdateCentroid(cachedVertices);
 			}
 			Camera main = _camera;
 			if (!main || Input == null)
 				return;
-			SelectionTool.Radius = Window.BrushRadius;
-			SelectionTool.Strength = Window.BrushStrength;
-			SelectionTool.Falloff = Window.BrushFalloff;
+			_session.Radius = Window.BrushRadius;
+			_session.Strength = Window.BrushStrength;
+			_session.Falloff = Window.BrushFalloff;
 			if (_gizmo != null)
 			{
 				bool prevSoftEnabled = _gizmo.SoftSelectionEnabled;
@@ -790,18 +934,18 @@ namespace BlendShapeEditor
 				if (_softWeightsDirty && Time.unscaledTime - _softWeightsDirtyTime >= 0.15f)
 				{
 					_softWeightsDirty = false;
-					Vector3[] cachedVertices2 = SelectionTool.CachedVertices;
+					Vector3[] cachedVertices2 = _session.Positions;
 					if (cachedVertices2 != null)
 					{
 						List<int>[] adjacency = _smoothTool?.Adjacency;
-						_gizmo.ComputeSoftWeights(cachedVertices2, SelectionTool.Grid, adjacency);
+						_gizmo.ComputeSoftWeights(cachedVertices2, _session.Grid, adjacency);
 						if (_symmetryEnabled && _gizmo.HasMirrorTarget)
-							_gizmo.ComputeMirrorSoftWeights(cachedVertices2, SelectionTool.Grid, adjacency);
+							_gizmo.ComputeMirrorSoftWeights(cachedVertices2, _session.Grid, adjacency);
 						_wireColorsDirty = true;
 					}
 				}
 				// UpdateHover runs every frame for handle highlight rendering
-				Transform targetTransform = SelectionTool.TargetTransform;
+				Transform targetTransform = _session.Space;
 				_gizmo.UpdateHover(InputHelper.MousePosition, main, targetTransform);
 
 				if (Window.DeferSkinningDiagnostic)
@@ -827,7 +971,7 @@ namespace BlendShapeEditor
 					_gizmo.ClearMirrorTarget();
 				if ((_symmetryEnabled != prevSymEnabled || _symmetryAxis != prevSymAxis || _symmetryCenterSet != prevSymCenterSet || !Mathf.Approximately(_symmetryCenter, prevSymCenter)) && _symmetryEnabled && _gizmo.HasTarget)
 				{
-					Vector3[] cachedVertices3 = SelectionTool.CachedVertices;
+					Vector3[] cachedVertices3 = _session.Positions;
 					if (cachedVertices3 != null)
 						UpdateGizmoTarget(cachedVertices3);
 				}
@@ -900,7 +1044,7 @@ namespace BlendShapeEditor
 				return;
 			}
 			Ray ray = main.ScreenPointToRay(InputHelper.MousePosition);
-			_hasHit = SelectionTool.Raycast(ray, out _lastHitPoint, out _lastHitNormal);
+			_hasHit = _session.Raycast(ray, out _lastHitPoint, out _lastHitNormal);
 
 			
 
@@ -1007,7 +1151,7 @@ namespace BlendShapeEditor
 		private void ApplyBrush(Event e, Camera cam, DeformLayer activeLayer)
 		{
 			Vector3[] deltas = activeLayer.Deltas;
-			Vector3[] cachedNormals = SelectionTool.CachedNormals;
+			Vector3[] cachedNormals = _session.Normals;
 			bool shouldSmooth = e.shift && _isBrushing;
 			float direction = e.control ? -1f : 1f;
 			IDeformTool smoothTool = _smoothTool;
@@ -1025,7 +1169,7 @@ namespace BlendShapeEditor
 				if (_moveGrabVertices == null)
 				{
 					Ray ray = cam.ScreenPointToRay(InputHelper.MousePosition);
-					BrushResult initialResult = SelectionTool.BrushSelect(ray);
+					BrushResult initialResult = _session.BrushSelect(ray);
 					if (initialResult == null || initialResult.AffectedVertices.Count == 0)
 						return;
 					_moveGrabVertices = new Dictionary<int, float>(initialResult.AffectedVertices);
@@ -1037,7 +1181,7 @@ namespace BlendShapeEditor
 					};
 				}
 				brushResult = _moveGrabResult;
-				moveTool.RendererTransform = _targetRenderer ? _targetRenderer.transform : null;
+				moveTool.RendererTransform = _session.Space;
 				moveTool.UseViewPlane = !e.alt;
 				Vector3 hitScreen = cam.WorldToScreenPoint(brushResult.HitPoint);
 				Vector3 hitWorld = cam.ScreenToWorldPoint(hitScreen);
@@ -1054,7 +1198,7 @@ namespace BlendShapeEditor
 			{
 				// Inflate/Smooth: need a live raycast hit each frame
 				Ray ray = cam.ScreenPointToRay(InputHelper.MousePosition);
-				brushResult = SelectionTool.BrushSelect(ray);
+				brushResult = _session.BrushSelect(ray);
 				if (brushResult == null || brushResult.AffectedVertices.Count == 0)
 					return;
 			}
@@ -1102,7 +1246,7 @@ namespace BlendShapeEditor
 			
 			ApplyToolToSurface(activeTool, activeLayer, brushResult, cachedNormals, cam);
 			_brushAffectedVertices = brushResult.AffectedVertices;
-			if (!_symmetryEnabled || !_targetRenderer)
+			if (!_symmetryEnabled || !_session.Space)
 			{
 				_brushMirrorAffectedVertices = null;
 				return;
@@ -1115,7 +1259,7 @@ namespace BlendShapeEditor
 				}
 				else
 				{
-					Transform xform = _targetRenderer.transform;
+					Transform xform = _session.Space;
 					Vector3 localHit = xform.InverseTransformPoint(brushResult.HitPoint);
 					float symCenter = _symmetryCenterSet ? _symmetryCenter : 0f;
 					int axis = _symmetryAxis;
@@ -1134,8 +1278,7 @@ namespace BlendShapeEditor
 					else
 						localNormal.z = -localNormal.z;
 					Vector3 mirrorWorldNormal = xform.TransformDirection(localNormal);
-					Vector3 colliderLocalPoint = SelectionTool.ColliderTransform ? SelectionTool.ColliderTransform.InverseTransformPoint(mirrorWorld) : localHit;
-					mirrorResult = SelectionTool.BrushSelectAtPoint(colliderLocalPoint, mirrorWorld, mirrorWorldNormal);
+					mirrorResult = _session.BrushSelectAtPoint(localHit, mirrorWorld, mirrorWorldNormal);
 					if (activeTool is MoveTool && mirrorResult != null && _moveGrabMirrorResult == null)
 						_moveGrabMirrorResult = mirrorResult;
 				}
@@ -1166,7 +1309,7 @@ namespace BlendShapeEditor
 		private void ApplyToolToSurface(IDeformTool tool, DeformLayer layer, BrushResult result, Vector3[] cachedNormals, Camera cam)
 		{
 			WeldGroups welds = Window != null && Window.WeldEnabled ? _weldGroups : null;
-			_deformSurface.Bind(SelectionTool, _deformer, layer, GetBrushNormals(cachedNormals, result.AffectedVertices), _smoothTool?.Adjacency, welds);
+			_deformSurface.Bind(_session, layer, GetBrushNormals(cachedNormals, result.AffectedVertices), _smoothTool?.Adjacency, welds);
 			_displacementScratch.Clear();
 			tool.Apply(_deformSurface, result, cam, _displacementScratch);
 			_deformSurface.ApplyDisplacements(_displacementScratch);
@@ -1202,7 +1345,7 @@ namespace BlendShapeEditor
 			if (data != null && data.ActiveLayer == null)
 			{
 				_gizmo?.SetTarget(null, null, null);
-				SelectionTool?.ClearSelection();
+				_session.ClearSelection();
 			}
 			else if (_gizmo != null && _gizmo.HasTarget)
 			{
@@ -1213,7 +1356,7 @@ namespace BlendShapeEditor
 		public void UndoOneStep()
 		{
 			if (_undoStack == null || !_undoStack.CanUndo) return;
-			UndoContext ctx = new UndoContext { Deformer = _deformer, Data = Window?.ActiveDeformData, Window = Window };
+			UndoContext ctx = new UndoContext { Session = _session, Data = Window?.ActiveDeformData, Window = Window };
 			_undoStack.Undo(ctx);
 			PostUndoRedoCleanup();
 		}
@@ -1221,7 +1364,7 @@ namespace BlendShapeEditor
 		public void RedoOneStep()
 		{
 			if (_undoStack == null || !_undoStack.CanRedo) return;
-			UndoContext ctx = new UndoContext { Deformer = _deformer, Data = Window?.ActiveDeformData, Window = Window };
+			UndoContext ctx = new UndoContext { Session = _session, Data = Window?.ActiveDeformData, Window = Window };
 			_undoStack.Redo(ctx);
 			PostUndoRedoCleanup();
 		}
@@ -1260,8 +1403,8 @@ namespace BlendShapeEditor
 		{
 			if (_gizmo == null || activeLayer == null || Input.IsCamControlNow)
 				return;
-			Transform targetTransform = SelectionTool.TargetTransform;
-			Vector3[] cachedVertices = SelectionTool.CachedVertices;
+			Transform targetTransform = _session.Space;
+			Vector3[] cachedVertices = _session.Positions;
 
 			// scroll events
 			if (_gizmo.HasTarget)
@@ -1375,9 +1518,9 @@ namespace BlendShapeEditor
 				Rect screenRect = new Rect(xMin, screenYMin, xMax - xMin, screenYMax - screenYMin);
 				bool[] visMask = (Window != null && Window.VertexDisplayMode == ShapeEditorWindow.VertexDisplayType.BackfaceCulling) ? _vertexVisible : null;
 				if ((mods & EventModifiers.Control) != 0)
-					SelectionTool.DeselectBox(cam, screenRect, visMask);
+					_session.DeselectBox(cam, screenRect, visMask);
 				else
-					SelectionTool.SelectBox(cam, screenRect, (mods & EventModifiers.Shift) != 0, visMask);
+					_session.SelectBox(cam, screenRect, (mods & EventModifiers.Shift) != 0, visMask);
 			}
 
 			UpdateGizmoTarget(cachedVertices);
@@ -1389,34 +1532,34 @@ namespace BlendShapeEditor
 			if (!_hasHit)
 			{
 				if ((mods & (EventModifiers.Shift | EventModifiers.Control)) == 0)
-					SelectionTool.ClearSelection();
+					_session.ClearSelection();
 				return;
 			}
 			int bestIdx = _hoverVertexIndex;
 			if (bestIdx >= 0)
 			{
 				if ((mods & EventModifiers.Shift) != 0)
-					SelectionTool.SelectedVertices.Add(bestIdx);
+					_session.SelectedVertices.Add(bestIdx);
 				else if ((mods & EventModifiers.Control) != 0)
-					SelectionTool.SelectedVertices.Remove(bestIdx);
+					_session.SelectedVertices.Remove(bestIdx);
 				else
 				{
-					SelectionTool.ClearSelection();
-					SelectionTool.SelectedVertices.Add(bestIdx);
+					_session.ClearSelection();
+					_session.SelectedVertices.Add(bestIdx);
 				}
 			}
 			else if ((mods & (EventModifiers.Shift | EventModifiers.Control)) == 0)
 			{
-				SelectionTool.ClearSelection();
+				_session.ClearSelection();
 			}
 		}
 
 		private void UpdateGizmoTarget(Vector3[] vertices)
 		{
-			if (_gizmo == null || SelectionTool == null)
+			if (_gizmo == null || !_session.HasTarget)
 				return;
-			Vector3[] cachedNormals = SelectionTool.CachedNormals;
-			HashSet<int> targetIndices = SelectionTool.SelectedVertices;
+			Vector3[] cachedNormals = _session.Normals;
+			HashSet<int> targetIndices = _session.SelectedVertices;
 			if (Window != null && Window.WeldEnabled)
 			{
 				var expanded = new HashSet<int>(targetIndices);
@@ -1431,10 +1574,10 @@ namespace BlendShapeEditor
 				targetIndices = expanded;
 			}
 			_gizmo.SetTarget(targetIndices, vertices, cachedNormals);
-			if (_symmetryEnabled && _gizmo.HasTarget && SelectionTool.Grid != null)
+			if (_symmetryEnabled && _gizmo.HasTarget && _session.Grid != null)
 			{
 				var mirrorIndices = new HashSet<int>();
-				SpatialHashGrid grid = SelectionTool.Grid;
+				SpatialHashGrid grid = _session.Grid;
 				float symmetryOffset = _symmetryCenterSet ? _symmetryCenter : 0f;
 				int axis = _symmetryAxis;
 				HashSet<int> selected = targetIndices;
@@ -1464,9 +1607,9 @@ namespace BlendShapeEditor
 			}
 			List<int>[] adjacency = _smoothTool?.Adjacency;
 			if (_gizmo.SoftSelectionEnabled && _gizmo.HasTarget)
-				_gizmo.ComputeSoftWeights(vertices, SelectionTool.Grid, adjacency);
+				_gizmo.ComputeSoftWeights(vertices, _session.Grid, adjacency);
 			if (_symmetryEnabled && _gizmo.HasMirrorTarget && _gizmo.SoftSelectionEnabled)
-				_gizmo.ComputeMirrorSoftWeights(vertices, SelectionTool.Grid, adjacency);
+				_gizmo.ComputeMirrorSoftWeights(vertices, _session.Grid, adjacency);
 			_wireColorsDirty = true;
 		}
 
@@ -1524,7 +1667,7 @@ namespace BlendShapeEditor
 				DrawBoxSelectRect();
 			GL.PopMatrix();
 			if (Window.OperationMode != ShapeEditorWindow.OpMode.Gizmo || _gizmo == null || !_gizmo.HasTarget) return;
-			Transform xform = SelectionTool?.TargetTransform;
+			Transform xform = _session.Space;
 			_gizmo.Render(Camera.main, xform);
 			_gizmo.RenderSoftRadius(Camera.main, xform);
 		}
@@ -1599,7 +1742,7 @@ namespace BlendShapeEditor
 			Vector3 up = ct.up * half;
 			bool inGizmoMode = Window.OperationMode == ShapeEditorWindow.OpMode.Gizmo;
 			bool inBrushMode = Window.OperationMode == ShapeEditorWindow.OpMode.Brush;
-			HashSet<int> selectedVerts = inGizmoMode && SelectionTool != null ? SelectionTool.SelectedVertices : null;
+			HashSet<int> selectedVerts = inGizmoMode && _session.HasTarget ? _session.SelectedVertices : null;
 			bool useGizmoSoftGradient = inGizmoMode && _gizmo != null && _gizmo.SoftSelectionEnabled && _gizmo.HasTarget;
 			Dictionary<int, float> primarySoftWeights = useGizmoSoftGradient ? _gizmo.PrimarySoftWeights : null;
 			Dictionary<int, float> mirrorSoftWeights = useGizmoSoftGradient && _gizmo.HasMirrorTarget ? _gizmo.MirrorSoftWeights : null;
@@ -1659,7 +1802,7 @@ namespace BlendShapeEditor
 
 		private void DrawWireframe()
 		{
-			if (_edges == null || !_wireLineMesh || Window.OverlayHide)
+			if (_edges == null || _wireParts.Count == 0 || Window.OverlayHide)
 				return;
 			Camera main = _camera;
 			if (!main)
@@ -1667,7 +1810,7 @@ namespace BlendShapeEditor
 			bool useSoftColors = _gizmo != null && _gizmo.SoftSelectionEnabled && _gizmo.HasTarget && Window.OperationMode == ShapeEditorWindow.OpMode.Gizmo;
 			bool useBrushColors = Window.OperationMode == ShapeEditorWindow.OpMode.Brush && (_brushAffectedVertices != null || _brushMirrorAffectedVertices != null);
 			bool inGizmoMode = Window.OperationMode == ShapeEditorWindow.OpMode.Gizmo;
-			HashSet<int> selectedVerts = inGizmoMode && SelectionTool != null ? SelectionTool.SelectedVertices : null;
+			HashSet<int> selectedVerts = inGizmoMode && _session.HasTarget ? _session.SelectedVertices : null;
 			HashSet<int> mirrorVerts = inGizmoMode && _symmetryEnabled && _gizmo != null && _gizmo.HasMirrorTarget ? _gizmo.MirrorIndices : null;
 			bool hasSelection = selectedVerts != null && selectedVerts.Count > 0;
 			bool hasMirror = mirrorVerts != null && mirrorVerts.Count > 0;
@@ -1683,24 +1826,37 @@ namespace BlendShapeEditor
 				_prevWireframeDisplayMode = wireDisplayMode;
 				_prevShowWeldColor = showWeldColor;
 			}
-			// Cull results were computed in LateUpdate; use them directly
+			// Cull results were computed in LateUpdate; use them directly. Edges never cross parts and are
+			// extracted part by part, so each part's visible edges form one contiguous run of the buffer.
 			int writeIdx = _culledVisibleCount;
-			if (writeIdx != _prevVisibleCount)
-			{
-				_visibleLineIndices = new int[writeIdx];
-				_prevVisibleCount = writeIdx;
-			}
-			Array.Copy(_lineIndexBuffer, _visibleLineIndices, writeIdx);
-			// Only re-upload vertex/color data when something changed
-			if (_vertsUploadDirty)
-			{
-				_wireLineMesh.vertices = _wireVerts;
-				_vertsUploadDirty = false;
-			}
-			_wireLineMesh.colors32 = _wireColors;
-			_wireLineMesh.SetIndices(_visibleLineIndices, MeshTopology.Lines, 0);
 			_cursorMaterial.SetPass(0);
-			Graphics.DrawMeshNow(_wireLineMesh, Matrix4x4.identity);
+			var cursor = 0;
+			IList<EditPart> parts = _session.Parts;
+			for (var p = 0; p < _wireParts.Count && p < parts.Count; p++)
+			{
+				WirePartMesh wire = _wireParts[p];
+				int offset = parts[p].Offset;
+				int end = offset + wire.Verts.Length;
+				int start = cursor;
+				while (cursor < writeIdx && _lineIndexBuffer[cursor] < end)
+					cursor += 2;
+				int count = cursor - start;
+				if (wire.Indices == null || wire.Indices.Length != count)
+					wire.Indices = new int[count];
+				for (var k = 0; k < count; k++)
+					wire.Indices[k] = _lineIndexBuffer[start + k] - offset;
+				// Only re-upload vertex data when something changed
+				if (_vertsUploadDirty)
+				{
+					Array.Copy(_wireVerts, offset, wire.Verts, 0, wire.Verts.Length);
+					wire.Mesh.vertices = wire.Verts;
+				}
+				Array.Copy(_wireColors, offset, wire.Colors, 0, wire.Colors.Length);
+				wire.Mesh.colors32 = wire.Colors;
+				wire.Mesh.SetIndices(wire.Indices, MeshTopology.Lines, 0);
+				Graphics.DrawMeshNow(wire.Mesh, Matrix4x4.identity);
+			}
+			_vertsUploadDirty = false;
 		}
 
 		private void RebuildWireColors(bool useSoftColors, bool useBrushColors, bool showWeldColor, HashSet<int> selectedVerts, HashSet<int> mirrorVerts)
@@ -1797,9 +1953,12 @@ namespace BlendShapeEditor
 
 		private void DrawMeshHighlight()
 		{
-			if (Window.SelectedRendererIndex < 0 || Window.SelectedRendererIndex >= Window.Renderers.Count)
-				return;
-			Renderer renderer = Window.Renderers[Window.SelectedRendererIndex];
+			foreach (Renderer renderer in Window.GetSelectedRenderers())
+				DrawMeshHighlight(renderer);
+		}
+
+		private void DrawMeshHighlight(Renderer renderer)
+		{
 			if (!renderer)
 				return;
 			ShapeDeformer deformer = renderer.GetComponent<ShapeDeformer>();
@@ -1834,22 +1993,30 @@ namespace BlendShapeEditor
 			}
 			if (!poseMesh || !poseMesh.isReadable)
 				return;
-			if (!Equals(_highlightTrisSource, sourceMesh))
-			{
-				_highlightTris = poseMesh.triangles;
-				_highlightTrisSource = sourceMesh;
-			}
+			int[] tris = GetHighlightTriangles(sourceMesh, poseMesh);
 			Vector3[] vertices = poseMesh.vertices;
 			_highlightMaterial.SetPass(0);
 			GL.PushMatrix();
 			GL.MultMatrix(l2w);
 			GL.Begin(4);
 			GL.Color(HighlightColor);
-			foreach (int t in _highlightTris)
+			foreach (int t in tris)
 				GL.Vertex(vertices[t]);
 
 			GL.End();
 			GL.PopMatrix();
+		}
+
+		/// Triangles per source mesh, cached so highlighting several renderers doesn't re-read them each frame.
+		private int[] GetHighlightTriangles(Mesh key, Mesh readFrom)
+		{
+			if (_highlightTris.TryGetValue(key, out int[] tris))
+				return tris;
+			if (_highlightTris.Count > 32)
+				_highlightTris.Clear();
+			tris = readFrom.triangles;
+			_highlightTris[key] = tris;
+			return tris;
 		}
 
 		private void DrawMeshHighlightFromDeformer(ShapeDeformer deformer, Renderer originalRenderer)
@@ -1857,11 +2024,7 @@ namespace BlendShapeEditor
 			Mesh displayMesh = deformer.DisplayMesh;
 			if (!displayMesh.isReadable)
 				return;
-			if (_highlightTrisSource != displayMesh)
-			{
-				_highlightTris = displayMesh.triangles;
-				_highlightTrisSource = displayMesh;
-			}
+			int[] tris = GetHighlightTriangles(displayMesh, displayMesh);
 			Vector3[] vertices = displayMesh.vertices;
 			Matrix4x4 l2w = deformer.DisplayTransform.localToWorldMatrix;
 			_highlightMaterial.SetPass(0);
@@ -1869,7 +2032,7 @@ namespace BlendShapeEditor
 			GL.MultMatrix(l2w);
 			GL.Begin(4);
 			GL.Color(HighlightColor);
-			foreach (int t in _highlightTris)
+			foreach (int t in tris)
 				GL.Vertex(vertices[t]);
 
 			GL.End();
@@ -1878,7 +2041,7 @@ namespace BlendShapeEditor
 
 		public void ActivateHighlight(int vertexCount)
 		{
-			if (!_deformer || vertexCount <= 0)
+			if (!_session.HasTarget || vertexCount <= 0)
 				return;
 			_highlightVertexCount = vertexCount;
 			Shader shader = Shader.Find("Hidden/Internal-Colored");
@@ -1890,13 +2053,17 @@ namespace BlendShapeEditor
 			_weightMaterial.SetInt(Cull, 0);
 			_weightMaterial.SetInt(ZWrite, 1);
 			_weightMaterial.SetInt(ZTest, 4);
-			_deformer.EnterEditMode(_weightMaterial);
+			foreach (EditPart part in _session.Parts)
+				if (part.Deformer)
+					part.Deformer.EnterEditMode(_weightMaterial);
 			_highlightActive = true;
 		}
 
 		public void DeactivateHighlight()
 		{
-			_deformer?.ExitEditMode();
+			foreach (EditPart part in _session.Parts)
+				if (part.Deformer)
+					part.Deformer.ExitEditMode();
 			if (_weightMaterial)
 			{
 				Destroy(_weightMaterial);
@@ -1908,36 +2075,46 @@ namespace BlendShapeEditor
 
 		public void UpdateHighlightColors(float[] weights)
 		{
-			if (!_highlightActive || !_deformer || weights == null)
+			if (!_highlightActive || !_session.HasTarget || weights == null)
 				return;
 			_highlightColors = new Color[_highlightVertexCount];
 			int count = Mathf.Min(weights.Length, _highlightColors.Length);
 			for (var i = 0; i < count; i++)
 				_highlightColors[i] = WeightGradient.Evaluate(weights[i]);
-			_deformer.SetEditColors(_highlightColors);
+			PushHighlightColors();
 		}
 
 		public void UpdateHighlightColors(Dictionary<int, float> affectedVertices)
 		{
-			if (!_highlightActive || _deformer == null || _highlightColors == null)
+			if (!_highlightActive || !_session.HasTarget || _highlightColors == null)
 				return;
 			foreach (KeyValuePair<int, float> pair in affectedVertices.Where(pair => pair.Key >= 0 && pair.Key < _highlightColors.Length))
 			{
 				_highlightColors[pair.Key] = WeightGradient.Evaluate(pair.Value);
 			}
-			_deformer.SetEditColors(_highlightColors);
+			PushHighlightColors();
+		}
+
+		// Splits the global highlight colour buffer into each part's own vertex range.
+		private void PushHighlightColors()
+		{
+			foreach (EditPart part in _session.Parts)
+			{
+				if (!part.Deformer)
+					continue;
+				var colors = new Color[part.VertexCount];
+				Array.Copy(_highlightColors, part.Offset, colors, 0, Mathf.Min(colors.Length, _highlightColors.Length - part.Offset));
+				part.Deformer.SetEditColors(colors);
+			}
 		}
 
 		private void RefreshWireframe()
 		{
-			Mesh mesh = null;
-			Matrix4x4 l2w = Matrix4x4.identity;
-			if (_deformer && _deformer.DisplayMesh && _deformer.DisplayTransform)
-			{
-				mesh = _deformer.DisplayMesh;
-				l2w = _deformer.DisplayTransform.localToWorldMatrix;
-			}
-			if (!mesh)
+			IList<EditPart> parts = _session.Parts;
+			bool allLive = parts.Count > 0;
+			foreach (EditPart part in parts)
+				allLive &= part.Deformer && part.Deformer.DisplayMesh && part.Deformer.DisplayTransform;
+			if (!allLive)
 			{
 				_wireVerts = null;
 				_wireTris = null;
@@ -1946,11 +2123,10 @@ namespace BlendShapeEditor
 				_vertexVisible = null;
 				return;
 			}
-			int instanceID = mesh.GetInstanceID();
-			bool meshChanged = _wireTris == null || _wireMeshId != instanceID;
-			// Read vertices into pre-allocated list to avoid allocation from mesh.vertices property
-			mesh.GetVertices(_vertexReadback);
-			int vCount = _vertexReadback.Count;
+			bool meshChanged = _wireTris == null || _wireMeshIds == null || _wireMeshIds.Length != parts.Count;
+			for (var p = 0; !meshChanged && p < parts.Count; p++)
+				meshChanged = _wireMeshIds[p] != parts[p].Deformer.DisplayMesh.GetInstanceID();
+			int vCount = _session.VertexCount;
 			if (_wireVerts == null || _wireVerts.Length != vCount)
 			{
 				_wireVerts = new Vector3[vCount];
@@ -1958,31 +2134,48 @@ namespace BlendShapeEditor
 			}
 			if (_vertexVisible == null || _vertexVisible.Length != vCount)
 				_vertexVisible = new bool[vCount];
-			// Always retransform when a live deformer is active (vertices change every frame from brushing/animation).
-			// Only skip when the transform hasn't changed and there's no active deformation.
-			bool l2wChanged = l2w != _prevL2W;
-			bool hasLiveDeformer = _deformer && _deformer.DisplayMesh;
-			if (meshChanged || l2wChanged || hasLiveDeformer)
+			// Live deformers change every frame (brushing/animation), so always retransform.
+			foreach (EditPart part in parts)
 			{
-				for (var i = 0; i < vCount; i++)
-					_wireVerts[i] = l2w.MultiplyPoint3x4(_vertexReadback[i]);
-				_prevL2W = l2w;
-				_vertsUploadDirty = true;
-				// Rebuild cull results since verts moved
-				_culledVisibleCount = 0;
+				// Read vertices into pre-allocated list to avoid allocation from mesh.vertices property
+				part.Deformer.DisplayMesh.GetVertices(_vertexReadback);
+				Matrix4x4 l2w = part.Deformer.DisplayTransform.localToWorldMatrix;
+				int count = Mathf.Min(_vertexReadback.Count, part.VertexCount);
+				for (var i = 0; i < count; i++)
+					_wireVerts[part.Offset + i] = l2w.MultiplyPoint3x4(_vertexReadback[i]);
 			}
+			_vertsUploadDirty = true;
+			// Rebuild cull results since verts moved
+			_culledVisibleCount = 0;
 			if (!meshChanged) return;
-			_wireTris = mesh.triangles;
-			_wireMeshId = instanceID;
+			var tris = new List<int>();
+			_wireMeshIds = new int[parts.Count];
+			for (var p = 0; p < parts.Count; p++)
+			{
+				Mesh mesh = parts[p].Deformer.DisplayMesh;
+				_wireMeshIds[p] = mesh.GetInstanceID();
+				int offset = parts[p].Offset;
+				foreach (int t in mesh.triangles)
+					tris.Add(t + offset);
+			}
+			_wireTris = tris.ToArray();
 			int triCount = _wireTris.Length / 3;
 			if (_triFrontFacing == null || _triFrontFacing.Length != triCount)
 				_triFrontFacing = new bool[triCount];
 			ExtractUniqueEdges(_wireTris);
-			if (_wireLineMesh)
-				Destroy(_wireLineMesh);
-			_wireLineMesh = new Mesh();
-			_wireLineMesh.MarkDynamic();
-			_prevVisibleCount = -1;
+			DestroyWireParts();
+			foreach (EditPart part in parts)
+			{
+				var mesh = new Mesh();
+				mesh.MarkDynamic();
+				_wireParts.Add(new WirePartMesh
+				{
+					Mesh = mesh,
+					Verts = new Vector3[part.VertexCount],
+					Colors = new Color32[part.VertexCount]
+				});
+			}
+			_vertsUploadDirty = true;
 			_wireColorsDirty = true;
 		}
 
@@ -2085,7 +2278,7 @@ namespace BlendShapeEditor
 		{
 			_activeInstances.Remove(this);
 			DeactivateHighlight();
-			SelectionTool?.CleanupCollider();
+			_session.Clear();
 			Input?.Cleanup();
 			if (_cursorMaterial)
 				Destroy(_cursorMaterial);
@@ -2093,8 +2286,15 @@ namespace BlendShapeEditor
 				Destroy(_highlightMaterial);
 			if (_bakeMeshCache)
 				Destroy(_bakeMeshCache);
-			if (_wireLineMesh)
-				Destroy(_wireLineMesh);
+			DestroyWireParts();
+		}
+
+		private void DestroyWireParts()
+		{
+			foreach (WirePartMesh wire in _wireParts)
+				if (wire.Mesh)
+					Destroy(wire.Mesh);
+			_wireParts.Clear();
 		}
 
 		/*
@@ -2110,14 +2310,11 @@ namespace BlendShapeEditor
 		*/
 
 		public ShapeEditorWindow Window;
-		public SelectionTool SelectionTool;
 		public InputHelper Input;
 		public Action OnRefreshRenderers;
 		public Func<object> GetCurrentSelection;
 
 		private Camera _camera;
-		private Renderer _targetRenderer;
-		private ShapeDeformer _deformer;
 		private MoveTool _moveTool;
 		private SmoothTool _smoothTool;
 		private InflateTool _inflateTool;
@@ -2132,6 +2329,7 @@ namespace BlendShapeEditor
 		private FillTool _fillTool;
 		private FlattenTool _flattenTool;
 		private TransformGizmo _gizmo;
+		private readonly EditSession _session = new EditSession();
 		private readonly WeldGroups _weldGroups = new WeldGroups();
 		private readonly DeformSurface _deformSurface = new DeformSurface();
 		private readonly Dictionary<int, Vector3> _displacementScratch = new Dictionary<int, Vector3>();
@@ -2143,8 +2341,7 @@ namespace BlendShapeEditor
 		private bool _hasHit;
 		private const int CursorSegments = 32;
 		private Material _highlightMaterial;
-		private int[] _highlightTris;
-		private Mesh _highlightTrisSource;
+		private readonly Dictionary<Mesh, int[]> _highlightTris = new Dictionary<Mesh, int[]>();
 		private Mesh _bakeMeshCache;
 		private static readonly Color HighlightColor = new Color(1f, 0.6f, 0f, 0.35f);
 		private object _lastSelection;
@@ -2165,14 +2362,12 @@ namespace BlendShapeEditor
 		private int[] _wireTris;
 		private bool[] _triFrontFacing;
 		private bool[] _vertexVisible;
-		private int _wireMeshId;
+		private int[] _wireMeshIds;
 		private float _refreshTimer;
 		private const float ColliderRefreshInterval = 0.5f;
 		private WireEdge[] _edges;
-		private Mesh _wireLineMesh;
+		private readonly List<WirePartMesh> _wireParts = new List<WirePartMesh>();
 		private int[] _lineIndexBuffer;
-		private int[] _visibleLineIndices;
-		private int _prevVisibleCount = -1;
 		private Color32[] _wireColors;
 		private bool _wireColorsDirty = true;
 		private bool _vertsUploadDirty = true;
@@ -2186,7 +2381,6 @@ namespace BlendShapeEditor
 		// Hover vertex detection
 		private int _hoverVertexIndex = -1;
 		private List<Vector3> _vertexReadback = new List<Vector3>();
-		private Matrix4x4 _prevL2W = Matrix4x4.zero;
 		private bool _softWeightsDirty;
 		private float _softWeightsDirtyTime;
 		private const float SoftWeightsThrottle = 0.15f;
@@ -2201,12 +2395,21 @@ namespace BlendShapeEditor
 		private static readonly Gradient WeightGradient = new Gradient();
 		private static readonly Gradient MirrorWeightGradient = new Gradient();
 		private bool _deferGizmoCentroidRefresh;
+		private bool _adjacencyHasWeldBridges;
 		private static float DotPixelSize => BSE.VertexDotSize.Value;
 		private static readonly int SrcBlend = Shader.PropertyToID("_SrcBlend");
 		private static readonly int DstBlend = Shader.PropertyToID("_DstBlend");
 		private static readonly int Cull = Shader.PropertyToID("_Cull");
 		private static readonly int ZWrite = Shader.PropertyToID("_ZWrite");
 		private static readonly int ZTest = Shader.PropertyToID("_ZTest");
+
+		private class WirePartMesh
+		{
+			public Mesh Mesh;
+			public Vector3[] Verts;
+			public Color32[] Colors;
+			public int[] Indices;
+		}
 
 		private struct WireEdge
 		{

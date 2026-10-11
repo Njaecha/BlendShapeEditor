@@ -66,6 +66,15 @@ namespace BlendShapeEditor
 			return _vertexToGroup.TryGetValue(vertexIndex, out members);
 		}
 
+		/// Calls `callback` once per weld group (each group's member array).
+		public void ForEachGroup(System.Action<int[]> callback)
+		{
+			var visited = new HashSet<int[]>();
+			foreach (int[] members in _vertexToGroup.Values)
+				if (visited.Add(members))
+					callback(members);
+		}
+
 		public Vector3 GetBlendedNormal(int vertexIndex, Vector3[] normals)
 		{
 			if (normals == null || vertexIndex < 0 || vertexIndex >= normals.Length)

@@ -4,24 +4,24 @@ using UnityEngine;
 namespace BlendShapeEditor
 {
 	/// The brush tools' only view of the mesh being sculpted. Everything a tool reads or writes is in
-	/// world space; this class owns the conversion to/from each vertex's bind-space delta, so tools never
-	/// have to know which renderer (or which bone weights) a vertex belongs to.
+	/// world space and indexed by EditSession global vertex index; the session owns the conversion to/from
+	/// each vertex's bind-space delta, so tools never have to know which renderer (or which bone weights)
+	/// a vertex belongs to.
 	public class DeformSurface
 	{
 		public List<int>[] Adjacency { get; private set; }
 
-		public void Bind(SelectionTool selection, ShapeDeformer deformer, DeformLayer layer, Vector3[] normals,
-			List<int>[] adjacency, WeldGroups weldGroups)
+		public void Bind(EditSession session, DeformLayer layer, Vector3[] normals, List<int>[] adjacency,
+			WeldGroups weldGroups)
 		{
-			_vertices = selection?.CachedVertices;
+			_session = session;
+			_vertices = session?.Positions;
 			_normals = normals;
-			_deformer = deformer;
 			_layer = layer;
 			_weldGroups = weldGroups;
 			Adjacency = adjacency;
-			Transform xform = selection?.ColliderTransform;
-			_localToWorld = xform ? xform.localToWorldMatrix : Matrix4x4.identity;
-			_rendererTransform = selection?.TargetTransform;
+			Transform space = session?.Space;
+			_localToWorld = space ? space.localToWorldMatrix : Matrix4x4.identity;
 		}
 
 		public bool IsValid(int vertexIndex)
@@ -48,13 +48,8 @@ namespace BlendShapeEditor
 		/// World displacement the active layer currently contributes at this vertex (layer weight not applied).
 		public Vector3 GetLayerDisplacement(int vertexIndex)
 		{
-			Vector3 bindDelta = _layer.Deltas[vertexIndex];
-			if (_deformer)
-			{
-				_deformer.BindDeltaToWorldDelta(vertexIndex, bindDelta, out Vector3 worldDisp);
-				return worldDisp;
-			}
-			return _rendererTransform ? _rendererTransform.TransformVector(bindDelta) : bindDelta;
+			_session.BindDeltaToWorldDelta(vertexIndex, _layer.Deltas[vertexIndex], out Vector3 worldDisp);
+			return worldDisp;
 		}
 
 		/// Converts each world displacement to its vertex's bind space and adds it to the active layer.
@@ -62,7 +57,7 @@ namespace BlendShapeEditor
 		/// when a tool (e.g. Smooth) computed slightly different values for each member.
 		public void ApplyDisplacements(Dictionary<int, Vector3> worldDisplacements)
 		{
-			if (_layer == null || worldDisplacements == null || worldDisplacements.Count == 0)
+			if (_layer == null || _session == null || worldDisplacements == null || worldDisplacements.Count == 0)
 				return;
 
 			if (_weldGroups != null)
@@ -74,19 +69,10 @@ namespace BlendShapeEditor
 				int vertexIndex = pair.Key;
 				if (vertexIndex < 0 || vertexIndex >= deltas.Length)
 					continue;
-				deltas[vertexIndex] += WorldToBind(vertexIndex, pair.Value);
+				_session.WorldDeltaToBindDelta(vertexIndex, pair.Value, out Vector3 bindDelta);
+				deltas[vertexIndex] += bindDelta;
 			}
 			_layer.Dirty = true;
-		}
-
-		private Vector3 WorldToBind(int vertexIndex, Vector3 worldDisp)
-		{
-			if (_deformer)
-			{
-				_deformer.WorldDeltaToBindDelta(vertexIndex, worldDisp, out Vector3 bindDelta);
-				return bindDelta;
-			}
-			return _rendererTransform ? _rendererTransform.InverseTransformVector(worldDisp) : worldDisp;
 		}
 
 		private void AverageWeldedDisplacements(Dictionary<int, Vector3> worldDisplacements)
@@ -112,13 +98,12 @@ namespace BlendShapeEditor
 				worldDisplacements[pair.Key] = pair.Value;
 		}
 
+		private EditSession _session;
 		private Vector3[] _vertices;
 		private Vector3[] _normals;
-		private ShapeDeformer _deformer;
 		private DeformLayer _layer;
 		private WeldGroups _weldGroups;
 		private Matrix4x4 _localToWorld;
-		private Transform _rendererTransform;
 		private readonly Dictionary<int, Vector3> _weldScratch = new Dictionary<int, Vector3>();
 	}
 }

@@ -254,9 +254,8 @@ namespace BlendShapeEditor
 
 		private void DrawEditExistingShapeControls()
 		{
-			if (SelectedRendererIndex == -1 || !SelectedRenderer || !(SelectedRenderer is SkinnedMeshRenderer smr) || !smr.sharedMesh)
-				return;
-			int shapeCount = smr.sharedMesh.blendShapeCount;
+			List<string> shapeNames = GetSelectedShapeNames();
+			int shapeCount = shapeNames.Count;
 			if (shapeCount == 0)
 				return;
 			
@@ -287,7 +286,7 @@ namespace BlendShapeEditor
 			_existingShapeScroll = GUILayout.BeginScrollView(_existingShapeScroll, "Box", GUILayout.Height(100f));
 			for (var i = 0; i < shapeCount; i++)
 			{
-				string shapeName = smr.sharedMesh.GetBlendShapeName(i);
+				string shapeName = shapeNames[i];
 				if (filtering && shapeName.IndexOf(_existingShapeFilter, StringComparison.OrdinalIgnoreCase) < 0)
 					continue;
 				Color guic = GUI.color;
@@ -772,7 +771,7 @@ namespace BlendShapeEditor
 			
 			ShowMeshHighlight = GUILayout.Toggle(ShowMeshHighlight, i18n.ShowMeshHighlight);
 			GUILayout.BeginHorizontal();
-			GUILayout.Label(i18n.TargetMesh);
+			GUILayout.Label(new GUIContent(i18n.TargetMesh, i18n.TargetMeshTooltip));
 			if (IsEditMode)
 			{
 				if (GUILayout.Button(i18n.CollapseRendererPanel))
@@ -788,11 +787,15 @@ namespace BlendShapeEditor
 				DeferRefreshRenderers = true;
 			}
 			GUILayout.EndHorizontal();
+			int selectedCount = GetSelectedRenderers().Count;
+			// Always shown (hint or count) so the list below doesn't jump when a second renderer is added.
+			GUILayout.Label(selectedCount > 1 ? string.Format(i18n.MultiRendererSelectedFmt, selectedCount) : i18n.MultiRendererHint);
 			
 			bool filtering = !string.IsNullOrEmpty(_rendererFilter);
 			bool prev = GUI.enabled;
-			if (IsEditMode)
-				GUI.enabled = false;
+			// The selection is fixed while editing; the session was built from it.
+			bool listEnabled = !IsEditMode;
+			GUI.enabled = listEnabled;
 
 			_rendererScroll = GUILayout.BeginScrollView(_rendererScroll, "Box", GUILayout.ExpandHeight(true));
 			for (var i = 0; i < Renderers.Count; i++)
@@ -814,11 +817,17 @@ namespace BlendShapeEditor
 				}
 				Color guic = GUI.color;
 				GUILayout.BeginHorizontal();
-				if (SelectedRendererIndex == i) GUI.color = Color.cyan;
-				if (GUILayout.Toggle(SelectedRendererIndex == i, name, "Button"))
-					SelectedRendererIndex = i;
+				bool isSelected = IsRendererSelected(i);
+				if (isSelected) GUI.color = Color.cyan;
+				if (GUILayout.Toggle(isSelected, name, "Button") != isSelected)
+				{
+					if (Event.current.control)
+						ToggleRendererInSelection(i);
+					else
+						SelectSingleRenderer(i);
+				}
 				GUI.color = guic;
-				GUI.enabled = true;
+				GUI.enabled = listEnabled;
 				if (blendShapeCount > 0)
 				{
 					GUI.color = _exitingShapeIndicatorColor;
@@ -829,8 +838,7 @@ namespace BlendShapeEditor
 			}
 			GUILayout.EndScrollView();
 
-			if (IsEditMode)
-				GUI.enabled = prev;
+			GUI.enabled = prev;
 		}
 
 		public void IncrementBakeShapeName()
@@ -1030,8 +1038,87 @@ namespace BlendShapeEditor
 		public float WeightUndoAfter;
 
 		public List<Renderer> Renderers = new List<Renderer>();
+		/// The renderer clicked last (the only one unless more were Ctrl+clicked).
 		public int SelectedRendererIndex = -1;
 		public Renderer SelectedRenderer => Renderers[Mathf.Clamp(SelectedRendererIndex, 0, Renderers.Count - 1)];
+
+		/// Every selected renderer that can be edited, SelectedRenderer first. Ctrl+clicked renderers are
+		/// kept by reference, so a refreshed renderer list drops the ones that are no longer in it.
+		public List<Renderer> GetSelectedRenderers()
+		{
+			var result = new List<Renderer>();
+			if (SelectedRendererIndex < 0 || SelectedRendererIndex >= Renderers.Count)
+				return result;
+			Renderer primary = Renderers[SelectedRendererIndex];
+			if (primary)
+				result.Add(primary);
+			foreach (Renderer r in Renderers)
+				if (r && r != primary && _extraSelectedRenderers.Contains(r))
+					result.Add(r);
+			return result;
+		}
+
+		private bool IsRendererSelected(int index)
+		{
+			if (SelectedRendererIndex < 0 || SelectedRendererIndex >= Renderers.Count)
+				return false;
+			return index == SelectedRendererIndex || _extraSelectedRenderers.Contains(Renderers[index]);
+		}
+
+		private void SelectSingleRenderer(int index)
+		{
+			SelectedRendererIndex = index;
+			_extraSelectedRenderers.Clear();
+		}
+
+		private void ToggleRendererInSelection(int index)
+		{
+			Renderer r = Renderers[index];
+			if (SelectedRendererIndex < 0 || SelectedRendererIndex >= Renderers.Count)
+			{
+				SelectSingleRenderer(index);
+				return;
+			}
+			if (index != SelectedRendererIndex)
+			{
+				if (!_extraSelectedRenderers.Remove(r))
+					_extraSelectedRenderers.Add(r);
+				return;
+			}
+			// Deselecting the primary: promote another selected renderer, or clear the selection.
+			Renderer next = GetSelectedRenderers().Find(x => x != r);
+			if (next)
+			{
+				_extraSelectedRenderers.Remove(next);
+				SelectedRendererIndex = Renderers.IndexOf(next);
+			}
+			else
+			{
+				SelectedRendererIndex = -1;
+			}
+		}
+
+		/// Blendshape names across every selected skinned renderer, in first-seen order.
+		private List<string> GetSelectedShapeNames()
+		{
+			var names = new List<string>();
+			var seen = new HashSet<string>();
+			foreach (Renderer r in GetSelectedRenderers())
+			{
+				if (!(r is SkinnedMeshRenderer smr) || !smr.sharedMesh)
+					continue;
+				Mesh mesh = smr.sharedMesh;
+				for (var i = 0; i < mesh.blendShapeCount; i++)
+				{
+					string shapeName = mesh.GetBlendShapeName(i);
+					if (seen.Add(shapeName))
+						names.Add(shapeName);
+				}
+			}
+			return names;
+		}
+
+		private readonly HashSet<Renderer> _extraSelectedRenderers = new HashSet<Renderer>();
 		public DeformData ActiveDeformData;
 		public int VertexCount;
 

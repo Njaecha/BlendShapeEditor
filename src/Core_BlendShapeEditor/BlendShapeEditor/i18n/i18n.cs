@@ -22,6 +22,9 @@ namespace BlendShapeEditor
         public static string MaterialEditorNoRenderers;
         public static string ShowMeshHighlight;
         public static string TargetMesh;
+        public static string TargetMeshTooltip;
+        public static string MultiRendererSelectedFmt;
+        public static string MultiRendererHint;
         public static string ExpandRendererPanel;
         public static string CollapseRendererPanel;
         public static string RefreshRenderers;

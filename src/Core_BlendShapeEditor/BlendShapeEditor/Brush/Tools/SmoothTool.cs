@@ -9,7 +9,9 @@ namespace BlendShapeEditor
 		public float Direction { get; set; }
 		public List<int>[] Adjacency { get; private set; }
 
-		public void BuildAdjacency(int[] triangles, int vertexCount, Vector3[] vertices = null)
+		/// `linkGroups` (optional, one id per vertex) restricts the colocated-vertex links to vertices of the
+		/// same group, e.g. the same renderer when several meshes with unrelated bind spaces are combined.
+		public void BuildAdjacency(int[] triangles, int vertexCount, Vector3[] vertices = null, int[] linkGroups = null)
 		{
 			Adjacency = new List<int>[vertexCount];
 			for (var i = 0; i < vertexCount; i++)
@@ -26,14 +28,28 @@ namespace BlendShapeEditor
 			}
 
 			if (vertices != null && vertices.Length == vertexCount)
-				LinkColocatedVertices(vertices);
+				LinkColocatedVertices(vertices, linkGroups != null && linkGroups.Length == vertexCount ? linkGroups : null);
 		}
 
-		private void LinkColocatedVertices(Vector3[] vertices)
+		/// Adds an edge between two vertices (both directions), e.g. a weld bridge between two meshes.
+		public void Link(int a, int b)
 		{
-			var posMap = new Dictionary<long, List<int>>();
+			if (Adjacency == null || a == b || a < 0 || b < 0 || a >= Adjacency.Length || b >= Adjacency.Length)
+				return;
+			AddEdge(a, b);
+		}
+
+		private void LinkColocatedVertices(Vector3[] vertices, int[] linkGroups)
+		{
+			var groupMaps = new Dictionary<int, Dictionary<long, List<int>>>();
 			for (var i = 0; i < vertices.Length; i++)
 			{
+				int groupId = linkGroups != null ? linkGroups[i] : 0;
+				if (!groupMaps.TryGetValue(groupId, out Dictionary<long, List<int>> posMap))
+				{
+					posMap = new Dictionary<long, List<int>>();
+					groupMaps[groupId] = posMap;
+				}
 				long key = QuantizePosition(vertices[i]);
 				if (!posMap.TryGetValue(key, out List<int> group))
 				{
@@ -43,7 +59,7 @@ namespace BlendShapeEditor
 				group.Add(i);
 			}
 
-			foreach (List<int> group in posMap.Select(pair => pair.Value).Where(group => group.Count >= 2))
+			foreach (List<int> group in groupMaps.Values.SelectMany(map => map.Values).Where(group => group.Count >= 2))
 			{
 				for (var j = 0; j < group.Count; j++)
 				for (int k = j + 1; k < group.Count; k++)

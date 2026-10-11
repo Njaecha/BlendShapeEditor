@@ -28,7 +28,7 @@ namespace BlendShapeEditor
 		public bool SymmetryEnabled { get; set; }
 		public int SymmetryAxis { get; set; }
 		public float SymmetryCenter { get; set; }
-		public ShapeDeformer Deformer { get; set; }
+		public EditSession Session { get; set; }
 		public Dictionary<int, Vector3> DragStartDeltas => _dragStartDeltas;
 
 		public void SetObjectRoot(Transform root)
@@ -616,8 +616,8 @@ namespace BlendShapeEditor
 
 		private Vector3 WorldToBindDelta(int vertexIdx, Vector3 worldDisp, Transform xform)
 		{
-			if (!Deformer) return xform ? xform.InverseTransformVector(worldDisp) : worldDisp;
-			Deformer.WorldDeltaToBindDelta(vertexIdx, worldDisp, out Vector3 result);
+			if (Session == null) return xform ? xform.InverseTransformVector(worldDisp) : worldDisp;
+			Session.WorldDeltaToBindDelta(vertexIdx, worldDisp, out Vector3 result);
 			return result;
 		}
 
