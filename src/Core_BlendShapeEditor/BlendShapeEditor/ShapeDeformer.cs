@@ -715,6 +715,10 @@ namespace BlendShapeEditor
 				return;
 			}
 
+			// StudioMode bone matrices are world-space (see ComputeCPUSkinning) while verts are renderer-local,
+			// so bring the skinned delta into the same space. Maker's matrices already include worldToLocal.
+			bool toLocal = StudioMode && _smr;
+			Matrix4x4 worldToLocal = toLocal ? _smr.transform.worldToLocalMatrix : Matrix4x4.identity;
 			for (var j = 0; j < verts.Length; j++)
 			{
 				Vector3 delta = deltas[j];
@@ -731,6 +735,8 @@ namespace BlendShapeEditor
 					skinned += _boneMatrices[bw.boneIndex2].MultiplyVector(delta) * bw.weight2;
 				if (bw.weight3 > 0f)
 					skinned += _boneMatrices[bw.boneIndex3].MultiplyVector(delta) * bw.weight3;
+				if (toLocal)
+					skinned = worldToLocal.MultiplyVector(skinned);
 				verts[j] += skinned * scale;
 			}
 		}
