@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace BlendShapeEditor
@@ -7,13 +8,12 @@ namespace BlendShapeEditor
         public float Direction { get; set; } = 1f;
         public float PinchStrength { get; set; } = 0.5f;
 
-        public void Apply(DeformLayer layer, BrushResult brushResult, Vector3[] vertices, Vector3[] normals,
-            Camera camera)
+        public void Apply(DeformSurface surface, BrushResult brushResult, Camera camera,
+            Dictionary<int, Vector3> displacements)
         {
-            if (layer == null || brushResult == null || normals == null || vertices == null)
+            if (surface == null || brushResult == null)
                 return;
 
-            Vector3[] deltas = layer.Deltas;
             float dir = Direction;
             if (Mathf.Approximately(dir, 0f))
                 return;
@@ -25,20 +25,18 @@ namespace BlendShapeEditor
             {
                 int vertexIndex = vertex.Key;
                 float falloff = vertex.Value;
-                if (vertexIndex < 0 || vertexIndex >= deltas.Length || vertexIndex >= normals.Length)
+                if (!surface.IsValid(vertexIndex))
                     continue;
 
                 Vector3 normalDisp = brushNormal * (dir * falloff * 0.003f);
 
-                Vector3 worldPos = vertices[vertexIndex] + deltas[vertexIndex];
+                Vector3 worldPos = surface.GetPosition(vertexIndex);
                 Vector3 towardCenter = (brushCenter - worldPos).normalized;
                 float pinchAmount = PinchStrength * falloff * falloff * 0.002f;
                 Vector3 pinchDisp = towardCenter * pinchAmount;
 
-                deltas[vertexIndex] += normalDisp + pinchDisp;
+                displacements.AddDisplacement(vertexIndex, normalDisp + pinchDisp);
             }
-
-            layer.Dirty = true;
         }
     }
 }

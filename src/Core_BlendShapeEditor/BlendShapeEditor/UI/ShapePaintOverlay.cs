@@ -55,8 +55,6 @@ namespace BlendShapeEditor
 			_deformer = renderer ? renderer.GetComponent<ShapeDeformer>() : null;
 			if (_gizmo != null)
 				_gizmo.Deformer = _deformer;
-			if (_moveTool != null)
-				_moveTool.Deformer = _deformer;
 		}
 
 		private void Awake()
@@ -345,7 +343,6 @@ namespace BlendShapeEditor
 			_flattenTool = new FlattenTool();
 			if (_gizmo == null)
 				_gizmo = new TransformGizmo();
-			_moveTool.Deformer = _deformer;
 			_gizmo.Deformer = _deformer;
 			Transform objectRoot = null;
 			
@@ -369,7 +366,6 @@ namespace BlendShapeEditor
 			Mesh mesh = MeshHelper.GetMesh(renderer);
 			if (!mesh) return;
 			_smoothTool.BuildAdjacency(mesh.triangles, mesh.vertexCount, mesh.vertices);
-			_fillTool.Adjacency = _smoothTool.Adjacency;
 			Window.VertexCount = mesh.vertexCount;
 			ActivateHighlight(mesh.vertexCount);
 			RebuildWeldGroups();
@@ -1011,7 +1007,6 @@ namespace BlendShapeEditor
 		private void ApplyBrush(Event e, Camera cam, DeformLayer activeLayer)
 		{
 			Vector3[] deltas = activeLayer.Deltas;
-			Vector3[] cachedVertices = SelectionTool.CachedVertices;
 			Vector3[] cachedNormals = SelectionTool.CachedNormals;
 			bool shouldSmooth = e.shift && _isBrushing;
 			float direction = e.control ? -1f : 1f;
@@ -1105,7 +1100,7 @@ namespace BlendShapeEditor
 					flatten.PlaneComputed = false;
 			}
 			
-			activeTool.Apply(activeLayer, brushResult, cachedVertices, GetBrushNormals(cachedNormals, brushResult.AffectedVertices), cam);
+			ApplyToolToSurface(activeTool, activeLayer, brushResult, cachedNormals, cam);
 			_brushAffectedVertices = brushResult.AffectedVertices;
 			if (!_symmetryEnabled || !_targetRenderer)
 			{
@@ -1155,7 +1150,7 @@ namespace BlendShapeEditor
 					MoveTool mirrorMoveTool = activeTool as MoveTool;
 					if (mirrorMoveTool != null)
 						mirrorMoveTool.MirrorAxis = _symmetryAxis;
-					activeTool.Apply(activeLayer, mirrorResult, cachedVertices, GetBrushNormals(cachedNormals, mirrorResult.AffectedVertices), cam);
+					ApplyToolToSurface(activeTool, activeLayer, mirrorResult, cachedNormals, cam);
 					if (mirrorMoveTool != null)
 						mirrorMoveTool.MirrorAxis = -1;
 					_brushMirrorAffectedVertices = mirrorResult.AffectedVertices;
@@ -1166,6 +1161,15 @@ namespace BlendShapeEditor
 				}
 			}
 			_wireColorsDirty = true;
+		}
+
+		private void ApplyToolToSurface(IDeformTool tool, DeformLayer layer, BrushResult result, Vector3[] cachedNormals, Camera cam)
+		{
+			WeldGroups welds = Window != null && Window.WeldEnabled ? _weldGroups : null;
+			_deformSurface.Bind(SelectionTool, _deformer, layer, GetBrushNormals(cachedNormals, result.AffectedVertices), _smoothTool?.Adjacency, welds);
+			_displacementScratch.Clear();
+			tool.Apply(_deformSurface, result, cam, _displacementScratch);
+			_deformSurface.ApplyDisplacements(_displacementScratch);
 		}
 
 		private void CommitBrushUndoEntry(DeformLayer layer)
@@ -2129,6 +2133,8 @@ namespace BlendShapeEditor
 		private FlattenTool _flattenTool;
 		private TransformGizmo _gizmo;
 		private readonly WeldGroups _weldGroups = new WeldGroups();
+		private readonly DeformSurface _deformSurface = new DeformSurface();
+		private readonly Dictionary<int, Vector3> _displacementScratch = new Dictionary<int, Vector3>();
 		private Vector3[] _weldBlendedNormalsBuffer;
 		private static readonly List<ShapePaintOverlay> _activeInstances = new List<ShapePaintOverlay>();
 		private Material _cursorMaterial;

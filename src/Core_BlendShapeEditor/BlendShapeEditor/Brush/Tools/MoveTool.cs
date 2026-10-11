@@ -10,17 +10,15 @@ namespace BlendShapeEditor
 		public float DragDelta { get; set; }
 		public bool UseViewPlane { get; set; }
 		public Transform RendererTransform { get; set; }
-		public ShapeDeformer Deformer { get; set; }
 
 		public int MirrorAxis { get; set; } = -1;
 
 
-		public void Apply(DeformLayer layer, BrushResult brushResult, Vector3[] vertices, Vector3[] normals, Camera camera)
+		public void Apply(DeformSurface surface, BrushResult brushResult, Camera camera, Dictionary<int, Vector3> displacements)
 		{
-			if (layer == null || brushResult == null)
+			if (surface == null || brushResult == null)
 				return;
 
-			Vector3[] deltas = layer.Deltas;
 			Vector3 moveDir;
 
 			if (UseViewPlane && camera)
@@ -61,15 +59,9 @@ namespace BlendShapeEditor
 			{
 				int vertexIndex = pair.Key;
 				float falloff = pair.Value;
-				if (vertexIndex < 0 || vertexIndex >= deltas.Length) continue;
-				Vector3 bindDelta;
-				if (Deformer)
-					Deformer.WorldDeltaToBindDelta(vertexIndex, moveDir, out bindDelta);
-				else
-					bindDelta = (RendererTransform) ? RendererTransform.InverseTransformVector(moveDir) : moveDir;
-				deltas[vertexIndex] += bindDelta * falloff;
+				if (!surface.IsValid(vertexIndex)) continue;
+				displacements.AddDisplacement(vertexIndex, moveDir * falloff);
 			}
-			layer.Dirty = true;
 		}
 	}
 }

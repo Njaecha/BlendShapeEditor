@@ -759,6 +759,31 @@ namespace BlendShapeEditor
 			return true;
 		}
 
+		/// Exact inverse of WorldDeltaToBindDelta: the world-space displacement a stored bind-space delta produces.
+		public bool BindDeltaToWorldDelta(int vertexIdx, Vector3 bindDelta, out Vector3 worldDisp)
+		{
+			Transform transform = _smr ? _smr.transform
+				: _sourceMeshFilter ? _sourceMeshFilter.transform
+				: _sourceMeshRenderer ? _sourceMeshRenderer.transform
+				: null;
+
+			if (_boneWeights == null || _boneMatrices == null || vertexIdx < 0 || vertexIdx >= _boneWeights.Length)
+			{
+				worldDisp = transform ? transform.TransformVector(bindDelta) : bindDelta;
+				return false;
+			}
+
+			BoneWeight bw = _boneWeights[vertexIdx];
+			Matrix4x4 M = Matrix4x4.zero;
+			AccumulateBoneMatrix(ref M, bw.boneIndex0, bw.weight0);
+			AccumulateBoneMatrix(ref M, bw.boneIndex1, bw.weight1);
+			AccumulateBoneMatrix(ref M, bw.boneIndex2, bw.weight2);
+			AccumulateBoneMatrix(ref M, bw.boneIndex3, bw.weight3);
+			Vector3 localDisp = M.MultiplyVector(bindDelta);
+			worldDisp = StudioMode ? localDisp : (transform ? transform.TransformVector(localDisp) : localDisp);
+			return true;
+		}
+
 		public void LogSkinningDiagnostic(int vertexIdx, Vector3 worldDispSample, Transform xform)
 		{
 			if (_boneWeights == null || _boneMatrices == null)

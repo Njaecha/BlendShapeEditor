@@ -66,28 +66,51 @@ namespace BlendShapeEditor
 		}
 		
 
-		public void Apply(DeformLayer layer, BrushResult brushResult, Vector3[] vertices, Vector3[] normals, Camera camera)
+		// Smooths the active layer's displacement (not the whole shape): each vertex is pulled toward the
+		// average world displacement of its neighbours. Working in world space rather than averaging raw
+		// bind-space deltas keeps this correct when neighbours have different bone weights.
+		public void Apply(DeformSurface surface, BrushResult brushResult, Camera camera, Dictionary<int, Vector3> displacements)
 		{
-			if (layer == null || brushResult == null || Adjacency == null)
+			List<int>[] adjacency = surface?.Adjacency;
+			if (brushResult == null || adjacency == null)
 				return;
 
-			Vector3[] deltas = layer.Deltas;
+			_layerDispCache.Clear();
 			foreach (KeyValuePair<int, float> pair in brushResult.AffectedVertices)
 			{
 				int vertexIndex = pair.Key;
 				float falloff = pair.Value;
-				if (vertexIndex < 0 || vertexIndex >= deltas.Length)
+				if (!surface.IsValid(vertexIndex) || vertexIndex >= adjacency.Length)
 					continue;
 
-				List<int> neighbors = Adjacency[vertexIndex];
+				List<int> neighbors = adjacency[vertexIndex];
 				if (neighbors.Count == 0)
 					continue;
 
-				Vector3 avg = neighbors.Where(neighbor => neighbor >= 0 && neighbor < deltas.Length).Aggregate(Vector3.zero, (current, neighbor) => current + deltas[neighbor]);
-				avg /= neighbors.Count;
-				deltas[vertexIndex] = Vector3.Lerp(deltas[vertexIndex], avg, falloff);
+				Vector3 avg = Vector3.zero;
+				var count = 0;
+				foreach (int neighbor in neighbors.Where(surface.IsValid))
+				{
+					avg += CachedLayerDisplacement(surface, neighbor);
+					count++;
+				}
+				if (count == 0)
+					continue;
+				avg /= count;
+				Vector3 current = CachedLayerDisplacement(surface, vertexIndex);
+				displacements.AddDisplacement(vertexIndex, (avg - current) * falloff);
 			}
-			layer.Dirty = true;
 		}
+
+		private Vector3 CachedLayerDisplacement(DeformSurface surface, int vertexIndex)
+		{
+			if (_layerDispCache.TryGetValue(vertexIndex, out Vector3 disp))
+				return disp;
+			disp = surface.GetLayerDisplacement(vertexIndex);
+			_layerDispCache[vertexIndex] = disp;
+			return disp;
+		}
+
+		private readonly Dictionary<int, Vector3> _layerDispCache = new Dictionary<int, Vector3>();
 	}
 }

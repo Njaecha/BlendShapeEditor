@@ -10,6 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\BrushResult.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\DeformSurface.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\IDeformTool.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\BlobTool.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\ClayStripsTool.cs" />
