@@ -9,10 +9,8 @@ namespace BlendShapeEditor
 		public Vector2 MouseDelta { get; set; }
 		public float DragDelta { get; set; }
 		public bool UseViewPlane { get; set; }
-		public Transform RendererTransform { get; set; }
-
-		public int MirrorAxis { get; set; } = -1;
-
+		/// When set, the move direction is reflected through this plane (the mirrored half of a stroke).
+		public MirrorPlane Mirror { get; set; }
 
 		public void Apply(DeformSurface surface, BrushResult brushResult, Camera camera, Dictionary<int, Vector3> displacements)
 		{
@@ -37,23 +35,8 @@ namespace BlendShapeEditor
 				moveDir = brushResult.HitNormal.normalized * dragDelta;
 			}
 
-			if (MirrorAxis >= 0 && MirrorAxis <= 2 && RendererTransform)
-			{
-				Vector3 localDir = RendererTransform.InverseTransformVector(moveDir);
-				switch (MirrorAxis)
-				{
-					case 0:
-						localDir.x = -localDir.x;
-						break;
-					case 1:
-						localDir.y = -localDir.y;
-						break;
-					default:
-						localDir.z = -localDir.z;
-						break;
-				}
-				moveDir = RendererTransform.TransformVector(localDir);
-			}
+			if (Mirror != null)
+				moveDir = Mirror.ReflectVector(moveDir);
 
 			foreach (KeyValuePair<int, float> pair in brushResult.AffectedVertices)
 			{

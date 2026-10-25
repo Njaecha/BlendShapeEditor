@@ -177,28 +177,28 @@ namespace BlendShapeEditor
 					StudioUndoBridge.PushDummy(this);
 				}
 			}
-			if (Window.DeferSetMirrorCenter)
+			if (Window.DeferMirrorSnapAxis >= 0)
 			{
-				Window.DeferSetMirrorCenter = false;
-				if (_gizmo != null && _gizmo.HasTarget)
+				int snapAxis = Window.DeferMirrorSnapAxis;
+				Window.DeferMirrorSnapAxis = -1;
+				int snapIndex = Window.MirrorSnapTargetIndex;
+				if (_session.Space && snapIndex >= 0 && snapIndex < _mirrorSnapTargets.Count && _mirrorSnapTargets[snapIndex])
 				{
-					Vector3 centroidLocal = _gizmo.CentroidLocal;
-					int axisIdx = Window.MirrorAxisIndex;
-					float center = axisIdx == 0 ? centroidLocal.x : (axisIdx == 1 ? centroidLocal.y : centroidLocal.z);
-					Window.MirrorCenter = center;
-					Window.MirrorCenterSet = true;
-					_symmetryCenter = center;
-					_symmetryCenterSet = true;
+					MirrorPlane.State before = _mirrorPlane.GetState();
+					_mirrorPlane.SnapToTransform(_session.Space, _mirrorSnapTargets[snapIndex], snapAxis);
+					CenterMirrorPlaneOrigin();
+					_mirrorPlaneDirty = true;
+					PushMirrorPlaneUndo(before);
 				}
 			}
-			if (Window.DeferClearMirrorCenter)
+			if (Window.DeferMirrorReset)
 			{
-				Window.DeferClearMirrorCenter = false;
-				Window.MirrorCenter = 0f;
-				Window.MirrorCenterSet = false;
-				_symmetryCenter = 0f;
-				_symmetryCenterSet = false;
+				Window.DeferMirrorReset = false;
+				MirrorPlane.State before = _mirrorPlane.GetState();
+				ResetMirrorPlane();
+				PushMirrorPlaneUndo(before);
 			}
+			UpdateMirrorPicking();
 
 			if (Window.DeferCheckNameAvailability && _session.HasTarget)
 			{
@@ -387,6 +387,7 @@ namespace BlendShapeEditor
 			if (_gizmo == null)
 				_gizmo = new TransformGizmo();
 			_gizmo.Session = _session;
+			_gizmo.Mirror = _mirrorPlane;
 
 			if (!objectRoot)
 			{
@@ -395,11 +396,223 @@ namespace BlendShapeEditor
 				return;
 			}
 			_gizmo.SetObjectRoot(objectRoot);
+			SetUpMirrorPlane(objectRoot);
 			if (_session.RestTriangles == null) return;
 			RebuildAdjacency();
 			Window.VertexCount = _session.VertexCount;
 			ActivateHighlight(_session.VertexCount);
 			RebuildWeldGroups();
+		}
+
+		/// Snap targets for the mirror plane (object root, then every part's renderer), the mesh bounds used to
+		/// size the plane preview, and a default plane when the session's space changed since last time.
+		private void SetUpMirrorPlane(Transform objectRoot)
+		{
+			_mirrorSnapTargets.Clear();
+			_mirrorSnapTargets.Add(objectRoot);
+			var names = new List<string> { i18n.MirrorObjectRoot };
+			foreach (EditPart part in _session.Parts)
+			{
+				_mirrorSnapTargets.Add(part.Transform);
+				names.Add(part.Renderer ? part.Renderer.name : "?");
+			}
+			Window.MirrorSnapTargetNames = names.ToArray();
+			Window.MirrorSnapTargetIndex = 0;
+			Window.MirrorConfiguring = false;
+
+			Vector3[] positions = _session.Positions;
+			_meshBoundsLocal = new Bounds();
+			if (positions != null && positions.Length > 0)
+			{
+				_meshBoundsLocal = new Bounds(positions[0], Vector3.zero);
+				foreach (Vector3 position in positions)
+					_meshBoundsLocal.Encapsulate(position);
+			}
+			if (_mirrorPlane.Anchor != _session.Space)
+				ResetMirrorPlane();
+			EndMirrorPlaneDrag();
+		}
+
+		/// Keeps the "center between two vertices" pick state in sync with the window: starts (prefilled from a
+		/// selection of exactly two vertices in gizmo mode), confirms and cancels it.
+		private void UpdateMirrorPicking()
+		{
+			if (!Window.MirrorConfiguring || !_session.HasTarget)
+			{
+				Window.MirrorPicking = false;
+				EndMirrorPlaneDrag();
+			}
+			if (_mirrorPlaneGizmo.IsDragging && !UnityEngine.Input.GetMouseButton(0))
+			{
+				if (_mirrorPlaneReleasePending)
+					EndMirrorPlaneDrag();
+				_mirrorPlaneReleasePending = true;
+			}
+			if (Window.MirrorPicking != _wasMirrorPicking)
+			{
+				_wasMirrorPicking = Window.MirrorPicking;
+				_mirrorPicks.Clear();
+				if (_mirrorPickPressed)
+				{
+					_mirrorPickPressed = false;
+					Input?.SetCameraEnabled(true);
+				}
+				if (Window.MirrorPicking && Window.OperationMode == ShapeEditorWindow.OpMode.Gizmo && _session.SelectedVertices.Count == 2)
+					_mirrorPicks.AddRange(_session.SelectedVertices);
+			}
+			if (Window.DeferMirrorPickConfirm)
+			{
+				Window.DeferMirrorPickConfirm = false;
+				if (TryGetMirrorPickPoints(out Vector3 a, out Vector3 b))
+				{
+					MirrorPlane.State before = _mirrorPlane.GetState();
+					_mirrorPlane.SetFromPoints(_session.Space, a, b, _session.Space.up);
+					_mirrorPlaneDirty = true;
+					PushMirrorPlaneUndo(before);
+				}
+				Window.MirrorPicking = false;
+				_wasMirrorPicking = false;
+				_mirrorPicks.Clear();
+			}
+			// Released over the UI, where OnGUI never sees the MouseUp. Update runs before OnGUI, so wait one
+			// frame: on the release frame itself the MouseUp is still to come.
+			if (_mirrorPickPressed && !UnityEngine.Input.GetMouseButton(0))
+			{
+				if (_mirrorPickReleasePending)
+				{
+					_mirrorPickPressed = false;
+					Input?.SetCameraEnabled(true);
+				}
+				_mirrorPickReleasePending = true;
+			}
+			Window.MirrorPickCount = _mirrorPicks.Count;
+			Window.MirrorPickValid = TryGetMirrorPickPoints(out _, out _);
+		}
+
+		/// World positions of the two picked vertices; false unless exactly two are picked and they are
+		/// further apart than the weld radius (welded copies of one vertex define no direction).
+		private bool TryGetMirrorPickPoints(out Vector3 aWorld, out Vector3 bWorld)
+		{
+			aWorld = bWorld = Vector3.zero;
+			Vector3[] positions = _session.Positions;
+			Transform space = _session.Space;
+			if (_mirrorPicks.Count != 2 || positions == null || !space)
+				return false;
+			int a = _mirrorPicks[0];
+			int b = _mirrorPicks[1];
+			if (a < 0 || b < 0 || a >= positions.Length || b >= positions.Length)
+				return false;
+			if (Vector3.Distance(positions[a], positions[b]) <= BSE.WeldRadius.Value)
+				return false;
+			aWorld = space.TransformPoint(positions[a]);
+			bWorld = space.TransformPoint(positions[b]);
+			return true;
+		}
+
+		/// Outside of picking, LMB drags the plane gizmo. While picking, clicks on a hovered vertex add it to the
+		/// pick (or remove it if already picked); a third pick replaces the oldest.
+		private void ProcessMirrorConfigEvent(Event e, Camera cam)
+		{
+			if (e.button != 0 || e.alt)
+				return;
+			if (!Window.MirrorPicking)
+			{
+				ProcessMirrorPlaneGizmoEvent(e, cam);
+				return;
+			}
+			if (e.type == EventType.MouseDown && _hoverVertexIndex >= 0 && !Input.IsCamControlNow)
+			{
+				_mirrorPickPressed = true;
+				_mirrorPickReleasePending = false;
+				Input?.SetCameraEnabled(false);
+				e.Use();
+			}
+			else if (e.type == EventType.MouseUp && _mirrorPickPressed)
+			{
+				_mirrorPickPressed = false;
+				Input?.SetCameraEnabled(true);
+				int vertex = _hoverVertexIndex;
+				if (vertex >= 0)
+				{
+					if (!_mirrorPicks.Remove(vertex))
+					{
+						_mirrorPicks.Add(vertex);
+						if (_mirrorPicks.Count > 2)
+							_mirrorPicks.RemoveAt(0);
+					}
+				}
+				e.Use();
+			}
+		}
+
+		private void ProcessMirrorPlaneGizmoEvent(Event e, Camera cam)
+		{
+			if (e.type == EventType.MouseDown && !Input.IsCamControlNow && _mirrorPlaneGizmo.HoveredAxis != GizmoEnums.None)
+			{
+				MirrorPlane.State before = _mirrorPlane.GetState();
+				if (!_mirrorPlaneGizmo.BeginDrag(GUIToScreenPos(e.mousePosition), _session.Space))
+					return;
+				_mirrorPlaneDragStart = before;
+				_mirrorPlaneReleasePending = false;
+				Input?.SetCameraEnabled(false);
+				e.Use();
+			}
+			else if (e.type == EventType.MouseDrag && _mirrorPlaneGizmo.IsDragging)
+			{
+				_mirrorPlaneGizmo.UpdateDrag(GUIToScreenPos(e.mousePosition), cam);
+				e.Use();
+			}
+			else if (e.type == EventType.MouseUp && _mirrorPlaneGizmo.IsDragging)
+			{
+				// Mirror targets are refreshed once at the end instead of on every drag frame
+				EndMirrorPlaneDrag();
+				e.Use();
+			}
+		}
+
+		/// Default mirror plane: the session space's own X axis through its origin.
+		private void ResetMirrorPlane()
+		{
+			if (!_session.Space)
+				return;
+			_mirrorPlane.SetAxisPlane(_session.Space, 0, 0f);
+			CenterMirrorPlaneOrigin();
+			_mirrorPlaneDirty = true;
+		}
+
+		/// Moves the plane's origin (where its gizmo sits) to the mesh center projected onto the plane. The plane
+		/// itself is unchanged; this only keeps the gizmo on the mesh after snapping to e.g. a root at the feet.
+		private void CenterMirrorPlaneOrigin()
+		{
+			Transform space = _session.Space;
+			if (!space)
+				return;
+			Vector3 center = space.TransformPoint(_meshBoundsLocal.center);
+			Vector3 n = _mirrorPlane.NormalWorld;
+			Vector3 projected = center - Vector3.Dot(center - _mirrorPlane.OriginWorld, n) * n;
+			_mirrorPlane.SetFromWorld(space, projected, _mirrorPlane.RotationWorld);
+		}
+
+		/// Ends a plane drag that can no longer finish normally (configuration closed, or the mouse released
+		/// over the UI where OnGUI never sees the MouseUp).
+		private void EndMirrorPlaneDrag()
+		{
+			if (!_mirrorPlaneGizmo.IsDragging)
+				return;
+			_mirrorPlaneGizmo.EndDrag();
+			_mirrorPlaneDirty = true;
+			Input?.SetCameraEnabled(true);
+			PushMirrorPlaneUndo(_mirrorPlaneDragStart);
+		}
+
+		/// Records the change from `before` to the current plane, if there was one.
+		private void PushMirrorPlaneUndo(MirrorPlane.State before)
+		{
+			MirrorPlane.State after = _mirrorPlane.GetState();
+			if (_undoStack == null || before.SameAs(after))
+				return;
+			_undoStack.Push(new MirrorPlaneUndoEntry(_mirrorPlane, before, after, () => _mirrorPlaneDirty = true));
+			StudioUndoBridge.PushDummy(this);
 		}
 
 		private void RebuildWeldGroups()
@@ -486,6 +699,8 @@ namespace BlendShapeEditor
 			if (_gizmo != null && _gizmo.IsDragging)
 				_gizmo.EndDrag();
 			_gizmo?.SetObjectRoot(null);
+			Window.MirrorConfiguring = false;
+			_mirrorSnapTargets.Clear();
 			DeactivateHighlight();
 			foreach (EditPart part in _session.Parts)
 			{
@@ -954,22 +1169,31 @@ namespace BlendShapeEditor
 					RunSkinningDiagnostic(targetTransform);
 				}
 			}
+			// The plane gizmo is hidden (and inert) while picking vertices for the plane
+			if (Window.MirrorConfiguring && !Window.MirrorPicking)
+			{
+				_mirrorPlaneGizmo.Plane = _mirrorPlane;
+				_mirrorPlaneGizmo.Mode = Window.MirrorGizmoModeIndex == 1 ? GizmoMode.Rotate : GizmoMode.Translate;
+				_mirrorPlaneGizmo.SizeFactor = Window.GizmoSizeFactor;
+				if (ShapeEditorWindow.IsMouseOverUI || Input.IsCamControlNow)
+					_mirrorPlaneGizmo.ClearHover();
+				else
+					_mirrorPlaneGizmo.UpdateHover(InputHelper.MousePosition, main);
+			}
+			else
+			{
+				_mirrorPlaneGizmo.ClearHover();
+			}
 			bool prevSymEnabled = _symmetryEnabled;
-			int prevSymAxis = _symmetryAxis;
-			float prevSymCenter = _symmetryCenter;
-			bool prevSymCenterSet = _symmetryCenterSet;
 			_symmetryEnabled = Window.MirrorEnabled;
-			_symmetryAxis = Window.MirrorAxisIndex;
-			_symmetryCenter = Window.MirrorCenter;
-			_symmetryCenterSet = Window.MirrorCenterSet;
+			bool planeChanged = _mirrorPlaneDirty;
+			_mirrorPlaneDirty = false;
 			if (_gizmo != null)
 			{
 				_gizmo.SymmetryEnabled = _symmetryEnabled;
-				_gizmo.SymmetryAxis = _symmetryAxis;
-				_gizmo.SymmetryCenter = _symmetryCenterSet ? _symmetryCenter : 0f;
 				if (!_symmetryEnabled && prevSymEnabled && _gizmo.HasMirrorTarget)
 					_gizmo.ClearMirrorTarget();
-				if ((_symmetryEnabled != prevSymEnabled || _symmetryAxis != prevSymAxis || _symmetryCenterSet != prevSymCenterSet || !Mathf.Approximately(_symmetryCenter, prevSymCenter)) && _symmetryEnabled && _gizmo.HasTarget)
+				if ((_symmetryEnabled != prevSymEnabled || planeChanged) && _symmetryEnabled && _gizmo.HasTarget)
 				{
 					Vector3[] cachedVertices3 = _session.Positions;
 					if (cachedVertices3 != null)
@@ -1181,7 +1405,6 @@ namespace BlendShapeEditor
 					};
 				}
 				brushResult = _moveGrabResult;
-				moveTool.RendererTransform = _session.Space;
 				moveTool.UseViewPlane = !e.alt;
 				Vector3 hitScreen = cam.WorldToScreenPoint(brushResult.HitPoint);
 				Vector3 hitWorld = cam.ScreenToWorldPoint(hitScreen);
@@ -1259,26 +1482,10 @@ namespace BlendShapeEditor
 				}
 				else
 				{
-					Transform xform = _session.Space;
-					Vector3 localHit = xform.InverseTransformPoint(brushResult.HitPoint);
-					float symCenter = _symmetryCenterSet ? _symmetryCenter : 0f;
-					int axis = _symmetryAxis;
-					if (axis == 0)
-						localHit.x = symCenter * 2f - localHit.x;
-					else if (axis == 1)
-						localHit.y = symCenter * 2f - localHit.y;
-					else
-						localHit.z = symCenter * 2f - localHit.z;
-					Vector3 mirrorWorld = xform.TransformPoint(localHit);
-					Vector3 localNormal = xform.InverseTransformDirection(brushResult.HitNormal);
-					if (axis == 0)
-						localNormal.x = -localNormal.x;
-					else if (axis == 1)
-						localNormal.y = -localNormal.y;
-					else
-						localNormal.z = -localNormal.z;
-					Vector3 mirrorWorldNormal = xform.TransformDirection(localNormal);
-					mirrorResult = _session.BrushSelectAtPoint(localHit, mirrorWorld, mirrorWorldNormal);
+					Vector3 mirrorWorld = _mirrorPlane.ReflectPoint(brushResult.HitPoint);
+					Vector3 mirrorWorldNormal = _mirrorPlane.ReflectVector(brushResult.HitNormal);
+					Vector3 mirrorSpace = _session.Space.InverseTransformPoint(mirrorWorld);
+					mirrorResult = _session.BrushSelectAtPoint(mirrorSpace, mirrorWorld, mirrorWorldNormal);
 					if (activeTool is MoveTool && mirrorResult != null && _moveGrabMirrorResult == null)
 						_moveGrabMirrorResult = mirrorResult;
 				}
@@ -1292,10 +1499,10 @@ namespace BlendShapeEditor
 					}
 					MoveTool mirrorMoveTool = activeTool as MoveTool;
 					if (mirrorMoveTool != null)
-						mirrorMoveTool.MirrorAxis = _symmetryAxis;
+						mirrorMoveTool.Mirror = _mirrorPlane;
 					ApplyToolToSurface(activeTool, activeLayer, mirrorResult, cachedNormals, cam);
 					if (mirrorMoveTool != null)
-						mirrorMoveTool.MirrorAxis = -1;
+						mirrorMoveTool.Mirror = null;
 					_brushMirrorAffectedVertices = mirrorResult.AffectedVertices;
 				}
 				else
@@ -1578,26 +1785,14 @@ namespace BlendShapeEditor
 			{
 				var mirrorIndices = new HashSet<int>();
 				SpatialHashGrid grid = _session.Grid;
-				float symmetryOffset = _symmetryCenterSet ? _symmetryCenter : 0f;
-				int axis = _symmetryAxis;
+				Transform space = _session.Space;
+				float tolerance = BSE.MirrorMatchTolerance.Value;
 				HashSet<int> selected = targetIndices;
 				foreach (int idx in selected)
 				{
 					if (idx < 0 || idx >= vertices.Length) continue;
-					Vector3 mirrorPos = vertices[idx];
-					switch (axis)
-					{
-						case 0:
-							mirrorPos.x = symmetryOffset * 2f - mirrorPos.x;
-							break;
-						case 1:
-							mirrorPos.y = symmetryOffset * 2f - mirrorPos.y;
-							break;
-						default:
-							mirrorPos.z = symmetryOffset * 2f - mirrorPos.z;
-							break;
-					}
-					grid.FindVerticesInRadius(mirrorPos, 0.0002f, (found, distSq) =>
+					Vector3 mirrorPos = _mirrorPlane.ReflectSpacePoint(space, vertices[idx]);
+					grid.FindVerticesInRadius(mirrorPos, tolerance, (found, distSq) =>
 					{
 						if (!selected.Contains(found))
 							mirrorIndices.Add(found);
@@ -1658,7 +1853,8 @@ namespace BlendShapeEditor
 			GL.MultMatrix(Matrix4x4.identity);
 			if (hasWire)
 				DrawVertexDots(_camera);
-			if (Window.OperationMode == ShapeEditorWindow.OpMode.Brush)
+			bool configuringMirror = Window.MirrorConfiguring;
+			if (Window.OperationMode == ShapeEditorWindow.OpMode.Brush && !configuringMirror)
 			{
 				if (_hasHit)
 					DrawBrushCircle(_lastHitPoint, _lastHitNormal, Window.BrushRadius);
@@ -1666,10 +1862,41 @@ namespace BlendShapeEditor
 			if (_isBoxSelecting)
 				DrawBoxSelectRect();
 			GL.PopMatrix();
+			if (configuringMirror)
+			{
+				DrawMirrorPlane();
+				return;
+			}
 			if (Window.OperationMode != ShapeEditorWindow.OpMode.Gizmo || _gizmo == null || !_gizmo.HasTarget) return;
 			Transform xform = _session.Space;
 			_gizmo.Render(Camera.main, xform);
 			_gizmo.RenderSoftRadius(Camera.main, xform);
+		}
+
+		private void DrawMirrorPlane()
+		{
+			Transform space = _session.Space;
+			if (!space)
+				return;
+			Vector3 center = space.TransformPoint(_meshBoundsLocal.center);
+			float halfSize = space.TransformVector(_meshBoundsLocal.extents).magnitude;
+			// A complete pick previews the plane it would create instead of the current one
+			if (Window.MirrorPicking && TryGetMirrorPickPoints(out Vector3 a, out Vector3 b))
+			{
+				_mirrorPreviewPlane.SetFromPoints(space, a, b, space.up);
+				_mirrorPlaneGizmo.Plane = _mirrorPreviewPlane;
+				_mirrorPlaneGizmo.RenderSegment(a, b);
+			}
+			else
+			{
+				_mirrorPlaneGizmo.Plane = _mirrorPlane;
+			}
+			_mirrorPlaneGizmo.RenderPlane(center, halfSize);
+			if (!Window.MirrorPicking)
+			{
+				_mirrorPlaneGizmo.Plane = _mirrorPlane;
+				_mirrorPlaneGizmo.RenderHandle(_camera);
+			}
 		}
 
 		private void DrawBrushCircle(Vector3 center, Vector3 normal, float radius)
@@ -1740,8 +1967,10 @@ namespace BlendShapeEditor
 			float half = DotPixelSize * pixelWorldSize * 0.5f;
 			Vector3 right = ct.right * half;
 			Vector3 up = ct.up * half;
-			bool inGizmoMode = Window.OperationMode == ShapeEditorWindow.OpMode.Gizmo;
-			bool inBrushMode = Window.OperationMode == ShapeEditorWindow.OpMode.Brush;
+			bool configuringMirror = Window.MirrorConfiguring;
+			bool inGizmoMode = Window.OperationMode == ShapeEditorWindow.OpMode.Gizmo && !configuringMirror;
+			bool inBrushMode = Window.OperationMode == ShapeEditorWindow.OpMode.Brush && !configuringMirror;
+			List<int> mirrorPicks = configuringMirror && Window.MirrorPicking ? _mirrorPicks : null;
 			HashSet<int> selectedVerts = inGizmoMode && _session.HasTarget ? _session.SelectedVertices : null;
 			bool useGizmoSoftGradient = inGizmoMode && _gizmo != null && _gizmo.SoftSelectionEnabled && _gizmo.HasTarget;
 			Dictionary<int, float> primarySoftWeights = useGizmoSoftGradient ? _gizmo.PrimarySoftWeights : null;
@@ -1760,8 +1989,10 @@ namespace BlendShapeEditor
 			{
 				bool isHovered = i == _hoverVertexIndex
 					|| (hoverWeldGroup != null && Array.IndexOf(hoverWeldGroup, i) >= 0);
+				bool isPicked = mirrorPicks != null && mirrorPicks.Contains(i);
 				bool isInteracting = (selectedVerts != null && selectedVerts.Contains(i))
 					|| isHovered
+					|| isPicked
 					|| (primarySoftWeights != null && primarySoftWeights.ContainsKey(i))
 					|| (mirrorSoftWeights != null && mirrorSoftWeights.ContainsKey(i))
 					|| (brushAffected != null && brushAffected.ContainsKey(i))
@@ -1774,6 +2005,8 @@ namespace BlendShapeEditor
 				Color col;
 				if (isHovered)
 					col = BSE.VertexColorHover.Value;
+				else if (isPicked)
+					col = BSE.VertexColorMirrorPick.Value;
 				else if (primarySoftWeights != null && primarySoftWeights.TryGetValue(i, out float gw))
 					col = WeightGradient.Evaluate(gw);
 				else if (mirrorSoftWeights != null && mirrorSoftWeights.TryGetValue(i, out float mgw))
@@ -1796,6 +2029,21 @@ namespace BlendShapeEditor
 				Vector3 tr = c + right + up;
 				GL.Vertex(bl); GL.Vertex(br); GL.Vertex(tr);
 				GL.Vertex(bl); GL.Vertex(tr); GL.Vertex(tl);
+			}
+			// Picked vertices again, larger, so they stand out from the dense dot field
+			if (mirrorPicks != null)
+			{
+				GL.Color(BSE.VertexColorMirrorPick.Value);
+				foreach (int i in mirrorPicks)
+				{
+					if (i < 0 || i >= _wireVerts.Length)
+						continue;
+					Vector3 c = _wireVerts[i];
+					Vector3 r2 = right * 1.8f;
+					Vector3 u2 = up * 1.8f;
+					GL.Vertex(c - r2 - u2); GL.Vertex(c + r2 - u2); GL.Vertex(c + r2 + u2);
+					GL.Vertex(c - r2 - u2); GL.Vertex(c + r2 + u2); GL.Vertex(c - r2 + u2);
+				}
 			}
 			GL.End();
 		}
@@ -1953,8 +2201,12 @@ namespace BlendShapeEditor
 
 		private void DrawMeshHighlight()
 		{
-			foreach (Renderer renderer in Window.GetSelectedRenderers())
+			List<Renderer> selected = Window.GetSelectedRenderers();
+			foreach (Renderer renderer in selected)
 				DrawMeshHighlight(renderer);
+			Renderer hovered = Window.HoveredRenderer;
+			if (hovered && !selected.Contains(hovered))
+				DrawMeshHighlight(hovered);
 		}
 
 		private void DrawMeshHighlight(Renderer renderer)
@@ -2220,7 +2472,10 @@ namespace BlendShapeEditor
 				return;
 			DeformLayer activeLayer = activeDeformData.ActiveLayer;
 
-			if (Window.OperationMode == ShapeEditorWindow.OpMode.Brush)
+			// While configuring the mirror plane, brush strokes and vertex-gizmo edits are suspended
+			if (Window.MirrorConfiguring)
+				ProcessMirrorConfigEvent(e, main);
+			else if (Window.OperationMode == ShapeEditorWindow.OpMode.Brush)
 				ProcessBrushEvent(e, main, activeLayer);
 			else
 				ProcessGizmoEvent(e, main, activeLayer);
@@ -2385,9 +2640,18 @@ namespace BlendShapeEditor
 		private float _softWeightsDirtyTime;
 		private const float SoftWeightsThrottle = 0.15f;
 		private bool _symmetryEnabled;
-		private int _symmetryAxis;
-		private float _symmetryCenter;
-		private bool _symmetryCenterSet;
+		private readonly MirrorPlane _mirrorPlane = new MirrorPlane();
+		private readonly MirrorPlane _mirrorPreviewPlane = new MirrorPlane();
+		private readonly List<int> _mirrorPicks = new List<int>();
+		private bool _wasMirrorPicking;
+		private bool _mirrorPickPressed;
+		private bool _mirrorPickReleasePending;
+		private bool _mirrorPlaneReleasePending;
+		private MirrorPlane.State _mirrorPlaneDragStart;
+		private readonly MirrorPlaneGizmo _mirrorPlaneGizmo = new MirrorPlaneGizmo();
+		private readonly List<Transform> _mirrorSnapTargets = new List<Transform>();
+		private bool _mirrorPlaneDirty;
+		private Bounds _meshBoundsLocal;
 		private Material _weightMaterial;
 		private Color[] _highlightColors;
 		private int _highlightVertexCount;
