@@ -6,14 +6,13 @@ namespace BlendShapeEditor
     public class FillTool : IDeformTool
     {
         public float Direction { get; set; } = 1f;
-        public List<int>[] Adjacency { get; set; }
 
-        public void Apply(DeformLayer layer, BrushResult brushResult, Vector3[] vertices, Vector3[] normals, Camera camera)
+        public void Apply(DeformSurface surface, BrushResult brushResult, Camera camera, Dictionary<int, Vector3> displacements)
         {
-            if (layer == null || brushResult == null || normals == null || Adjacency == null)
+            List<int>[] adjacency = surface?.Adjacency;
+            if (surface == null || brushResult == null || !surface.HasNormals || adjacency == null)
                 return;
 
-            Vector3[] deltas = layer.Deltas;
             float dir = Direction;
             if (Mathf.Approximately(dir, 0f))
                 return;
@@ -22,10 +21,10 @@ namespace BlendShapeEditor
             {
                 int vertexIndex = vertex.Key;
                 float falloff = vertex.Value;
-                if (vertexIndex < 0 || vertexIndex >= deltas.Length || vertexIndex >= normals.Length)
+                if (!surface.IsValid(vertexIndex) || vertexIndex >= adjacency.Length)
                     continue;
 
-                List<int> neighbors = Adjacency[vertexIndex];
+                List<int> neighbors = adjacency[vertexIndex];
                 if (neighbors == null || neighbors.Count == 0)
                     continue;
 
@@ -33,18 +32,17 @@ namespace BlendShapeEditor
                 int count = 0;
                 foreach (int n in neighbors)
                 {
-                    if (n >= 0 && n < normals.Length)
+                    if (surface.IsValid(n))
                     {
-                        avgNormal += normals[n];
+                        avgNormal += surface.GetNormal(n);
                         count++;
                     }
                 }
                 if (count == 0) continue;
                 avgNormal = (avgNormal / count).normalized;
 
-                deltas[vertexIndex] += avgNormal * (dir * falloff * 0.003f);
+                displacements.AddDisplacement(vertexIndex, avgNormal * (dir * falloff * 0.003f));
             }
-            layer.Dirty = true;
         }
     }
 }

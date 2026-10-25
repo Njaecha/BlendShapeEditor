@@ -37,7 +37,7 @@ namespace BlendShapeEditor
 			_undoList.RemoveAt(index);
 			entry.Undo(ctx);
 			_redoList.Add(entry);
-			ctx.Deformer?.InvalidateDeltaCache();
+			ctx.Session?.InvalidateDeltaCaches();
 		}
 
 		public void Redo(UndoContext ctx)
@@ -49,7 +49,7 @@ namespace BlendShapeEditor
 			_redoList.RemoveAt(index);
 			entry.Redo(ctx);
 			_undoList.Add(entry);
-			ctx.Deformer?.InvalidateDeltaCache();
+			ctx.Session?.InvalidateDeltaCaches();
 		}
 
 		public void Clear()

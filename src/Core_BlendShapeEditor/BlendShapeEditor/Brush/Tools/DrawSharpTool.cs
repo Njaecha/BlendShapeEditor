@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace BlendShapeEditor
@@ -6,13 +7,12 @@ namespace BlendShapeEditor
     {
         public float Direction { get; set; } = 1f;
 
-        public void Apply(DeformLayer layer, BrushResult brushResult, Vector3[] vertices, Vector3[] normals,
-            Camera camera)
+        public void Apply(DeformSurface surface, BrushResult brushResult, Camera camera,
+            Dictionary<int, Vector3> displacements)
         {
-            if (layer == null || brushResult == null || normals == null)
+            if (surface == null || brushResult == null)
                 return;
 
-            Vector3[] deltas = layer.Deltas;
             float dir = Direction;
             if (Mathf.Approximately(dir, 0f))
                 return;
@@ -23,12 +23,10 @@ namespace BlendShapeEditor
             {
                 int vertexIndex = vertex.Key;
                 float falloff = vertex.Value;
-                if (vertexIndex < 0 || vertexIndex >= deltas.Length) continue;
+                if (!surface.IsValid(vertexIndex)) continue;
                 float sharpFalloff = falloff * falloff;
-                deltas[vertexIndex] += brushNormal * (dir * sharpFalloff * 0.003f);
+                displacements.AddDisplacement(vertexIndex, brushNormal * (dir * sharpFalloff * 0.003f));
             }
-
-            layer.Dirty = true;
         }
     }
 }
