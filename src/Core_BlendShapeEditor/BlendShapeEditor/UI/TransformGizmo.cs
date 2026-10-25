@@ -368,6 +368,11 @@ namespace BlendShapeEditor
 			_handle.UpdateHover(mouseScreen, cam);
 		}
 
+		public void ClearHover()
+		{
+			_handle.ClearHover();
+		}
+
 		public bool BeginDrag(Vector2 mouseScreen, Camera cam, Transform xform, DeformLayer layer, Vector3[] vertices)
 		{
 			if (_handle.HoveredAxis == GizmoEnums.None || !HasTarget || layer == null)

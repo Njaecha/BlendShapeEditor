@@ -199,6 +199,7 @@ namespace BlendShapeEditor
 				PushMirrorPlaneUndo(before);
 			}
 			UpdateMirrorPicking();
+			UpdateGizmoPress();
 
 			if (Window.DeferCheckNameAvailability && _session.HasTarget)
 			{
@@ -698,6 +699,7 @@ namespace BlendShapeEditor
 			Renderer renderer = Window.SelectedRenderer;
 			if (_gizmo != null && _gizmo.IsDragging)
 				_gizmo.EndDrag();
+			_gizmoPressPending = false;
 			_gizmo?.SetObjectRoot(null);
 			Window.MirrorConfiguring = false;
 			_mirrorSnapTargets.Clear();
@@ -1159,9 +1161,13 @@ namespace BlendShapeEditor
 						_wireColorsDirty = true;
 					}
 				}
-				// UpdateHover runs every frame for handle highlight rendering
+				// UpdateHover runs every frame for handle highlight rendering. A pending press keeps the handle
+				// it landed on, so a drag that starts a few pixels later still grabs that handle.
 				Transform targetTransform = _session.Space;
-				_gizmo.UpdateHover(InputHelper.MousePosition, main, targetTransform);
+				if (Window.GizmoHidden)
+					_gizmo.ClearHover();
+				else if (!_gizmoPressPending)
+					_gizmo.UpdateHover(InputHelper.MousePosition, main, targetTransform);
 
 				if (Window.DeferSkinningDiagnostic)
 				{
@@ -1272,8 +1278,10 @@ namespace BlendShapeEditor
 
 			
 
-			// Find closest visible vertex to mouse cursor for hover highlight
-			if (!Input.IsCamControlNow) UpdateHoverVertex(main, InputHelper.MousePosition);
+			// Find closest visible vertex to mouse cursor for hover highlight; none while dragging the gizmo,
+			// so the drag neither flickers over vertices nor selects one on release
+			if (_gizmo != null && _gizmo.IsDragging) _hoverVertexIndex = -1;
+			else if (!Input.IsCamControlNow) UpdateHoverVertex(main, InputHelper.MousePosition);
 		}
 
 		private void UpdateHoverVertex(Camera cam, Vector2 screenMousePos)
@@ -1606,6 +1614,30 @@ namespace BlendShapeEditor
 			_gizmoBeforeSnapshot = null;
 		}
 
+		/// Ends a gizmo press or drag that can no longer finish normally (gizmo hidden, mode switched, or the
+		/// mouse released over the UI where OnGUI never sees the MouseUp).
+		private void UpdateGizmoPress()
+		{
+			if (_gizmo == null || (!_gizmoPressPending && !_gizmo.IsDragging))
+				return;
+			bool abort = Window.GizmoHidden || Window.MirrorConfiguring || Window.OperationMode != ShapeEditorWindow.OpMode.Gizmo;
+			if (!abort && !UnityEngine.Input.GetMouseButton(0))
+			{
+				// OnGUI's MouseUp arrives after this frame's update; only give up if it hasn't by the next one
+				abort = _gizmoReleasePending;
+				_gizmoReleasePending = true;
+			}
+			if (!abort)
+				return;
+			_gizmoPressPending = false;
+			if (_gizmo.IsDragging)
+			{
+				_gizmo.EndDrag();
+				CommitGizmoUndoEntry(Window.ActiveDeformData?.ActiveLayer);
+			}
+			Input?.SetCameraEnabled(true);
+		}
+
 		private void ProcessGizmoEvent(Event e, Camera cam, DeformLayer activeLayer)
 		{
 			if (_gizmo == null || activeLayer == null || Input.IsCamControlNow)
@@ -1633,13 +1665,43 @@ namespace BlendShapeEditor
 				}
 			}
 			
-			// Gizmo drag (LMB on handle) — skipped when Alt is held (Alt+LMB = box selection)
+			// LMB on a handle — skipped when Alt is held (Alt+LMB = box selection). The press only becomes a
+			// drag once the mouse moves; released in place it clicks through to the vertex under the handle.
 			if (e.type == EventType.MouseDown && e.button == 0 && !e.alt && _gizmo.HoveredAxis != GizmoEnums.None)
 			{
-				Vector2 screenPos = GUIToScreenPos(e.mousePosition);
-				if (!_gizmo.BeginDrag(screenPos, cam, targetTransform, activeLayer, cachedVertices)) return;
-				_gizmoBeforeSnapshot = new Dictionary<int, Vector3>(_gizmo.DragStartDeltas);
+				_gizmoPressPending = true;
+				_gizmoReleasePending = false;
+				_gizmoPressPos = e.mousePosition;
 				Input?.SetCameraEnabled(false);
+				e.Use();
+				return;
+			}
+			if (e.type == EventType.MouseDrag && e.button == 0 && _gizmoPressPending)
+			{
+				if ((e.mousePosition - _gizmoPressPos).sqrMagnitude < GizmoDragThreshold * GizmoDragThreshold)
+				{
+					e.Use();
+					return;
+				}
+				_gizmoPressPending = false;
+				// Start from the press position so the handle doesn't jump by the threshold distance
+				if (!_gizmo.BeginDrag(GUIToScreenPos(_gizmoPressPos), cam, targetTransform, activeLayer, cachedVertices))
+				{
+					Input?.SetCameraEnabled(true);
+					return;
+				}
+				_gizmoBeforeSnapshot = new Dictionary<int, Vector3>(_gizmo.DragStartDeltas);
+			}
+			if (e.type == EventType.MouseUp && e.button == 0 && _gizmoPressPending)
+			{
+				_gizmoPressPending = false;
+				// A click that lands on no vertex leaves the selection alone instead of clearing it
+				if (_hoverVertexIndex >= 0 && _hasHit)
+				{
+					TrySelectVertexAtHit(e.modifiers, cachedVertices);
+					UpdateGizmoTarget(cachedVertices);
+				}
+				Input?.SetCameraEnabled(true);
 				e.Use();
 				return;
 			}
@@ -1869,7 +1931,8 @@ namespace BlendShapeEditor
 			}
 			if (Window.OperationMode != ShapeEditorWindow.OpMode.Gizmo || _gizmo == null || !_gizmo.HasTarget) return;
 			Transform xform = _session.Space;
-			_gizmo.Render(Camera.main, xform);
+			if (!Window.GizmoHidden)
+				_gizmo.Render(Camera.main, xform);
 			_gizmo.RenderSoftRadius(Camera.main, xform);
 		}
 
@@ -2613,6 +2676,11 @@ namespace BlendShapeEditor
 		private BrushResult _moveGrabResult;
 		private BrushResult _moveGrabMirrorResult;
 		private Dictionary<int, Vector3> _gizmoBeforeSnapshot;
+		/// LMB went down on a gizmo handle but hasn't moved past GizmoDragThreshold yet (GUI space).
+		private bool _gizmoPressPending;
+		private bool _gizmoReleasePending;
+		private Vector2 _gizmoPressPos;
+		private const float GizmoDragThreshold = 4f;
 		private Vector3[] _wireVerts;
 		private int[] _wireTris;
 		private bool[] _triFrontFacing;

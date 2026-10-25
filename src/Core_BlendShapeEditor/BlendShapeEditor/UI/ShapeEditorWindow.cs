@@ -36,6 +36,8 @@ namespace BlendShapeEditor
 		public bool MirrorPickValid { get; set; }
 		public bool DeferMirrorPickConfirm { get; set; }
 		public int GizmoModeIndex { get; set; }
+		/// Selection-only state: the gizmo is neither drawn nor hit-tested. Toggled by re-picking the active mode.
+		public bool GizmoHidden { get; set; }
 		public int GizmoSpaceIndex { get; set; }
 		public bool GizmoSoftSelection { get; set; }
 		public int SoftSelectModeIndex { get; set; }
@@ -451,17 +453,35 @@ namespace BlendShapeEditor
 			GUILayout.EndHorizontal();
 		}
 		
+		/// A mode button; picking the mode that is already active (button or hotkey) toggles the gizmo off,
+		/// leaving a selection-only state, and picking any mode brings it back.
+		private void DrawGizmoModeToggle(int mode, ConfigEntry<KeyboardShortcut> key, string labelFmt)
+		{
+			bool active = GizmoModeIndex == mode && !GizmoHidden;
+			bool pressed = !MirrorConfiguring && Hotkey(key);
+			if (GUILayout.Toggle(active, string.Format(labelFmt, key.S()), "Button", GUILayout.Width((_windowRect.width-10)/3-10)) != active)
+				pressed = true;
+			if (!pressed)
+				return;
+			if (active)
+			{
+				GizmoHidden = true;
+			}
+			else
+			{
+				GizmoModeIndex = mode;
+				GizmoHidden = false;
+			}
+		}
+
 		private void DrawGizmoControls()
 		{
 			GUILayout.BeginHorizontal();
-			if ((!MirrorConfiguring && Hotkey(BSE.KeyGizmoTranslate)) || GUILayout.Toggle(GizmoModeIndex == 0, string.Format(i18n.TranslateLabelFmt, BSE.KeyGizmoTranslate.S()), "Button", GUILayout.Width((_windowRect.width-10)/3-10)))
-				GizmoModeIndex = 0;
+			DrawGizmoModeToggle(0, BSE.KeyGizmoTranslate, i18n.TranslateLabelFmt);
 			GUILayout.FlexibleSpace();
-			if ((!MirrorConfiguring && Hotkey(BSE.KeyGizmoRotate)) || GUILayout.Toggle(GizmoModeIndex == 1, string.Format(i18n.RotateLabelFmt, BSE.KeyGizmoRotate.S()), "Button", GUILayout.Width((_windowRect.width-10)/3-10)))
-				GizmoModeIndex = 1;
+			DrawGizmoModeToggle(1, BSE.KeyGizmoRotate, i18n.RotateLabelFmt);
 			GUILayout.FlexibleSpace();
-			if (Hotkey(BSE.KeyGizmoScale) || GUILayout.Toggle(GizmoModeIndex == 2, string.Format(i18n.ScaleLabelFmt, BSE.KeyGizmoScale.S()), "Button", GUILayout.Width((_windowRect.width-10)/3-10)))
-				GizmoModeIndex = 2;
+			DrawGizmoModeToggle(2, BSE.KeyGizmoScale, i18n.ScaleLabelFmt);
 			GUILayout.EndHorizontal();
 
 			if (Hotkey(BSE.KeyGizmoCycleGizmoSpace))
