@@ -19,7 +19,6 @@ namespace BlendShapeEditor
 			UnityEngine.Object.DontDestroyOnLoad(_overlayGo);
 			Overlay = _overlayGo.AddComponent<ShapePaintOverlay>();
 			Overlay.Window = Window;
-			Overlay.SelectionTool = new SelectionTool();
 			Overlay.Input = new InputHelper();
 			Overlay.Input.Init();
 			Overlay.OnRefreshRenderers = RefreshRenderers;

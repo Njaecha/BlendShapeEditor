@@ -9,7 +9,9 @@ namespace BlendShapeEditor
 		public float Direction { get; set; }
 		public List<int>[] Adjacency { get; private set; }
 
-		public void BuildAdjacency(int[] triangles, int vertexCount, Vector3[] vertices = null)
+		/// `linkGroups` (optional, one id per vertex) restricts the colocated-vertex links to vertices of the
+		/// same group, e.g. the same renderer when several meshes with unrelated bind spaces are combined.
+		public void BuildAdjacency(int[] triangles, int vertexCount, Vector3[] vertices = null, int[] linkGroups = null)
 		{
 			Adjacency = new List<int>[vertexCount];
 			for (var i = 0; i < vertexCount; i++)
@@ -26,14 +28,28 @@ namespace BlendShapeEditor
 			}
 
 			if (vertices != null && vertices.Length == vertexCount)
-				LinkColocatedVertices(vertices);
+				LinkColocatedVertices(vertices, linkGroups != null && linkGroups.Length == vertexCount ? linkGroups : null);
 		}
 
-		private void LinkColocatedVertices(Vector3[] vertices)
+		/// Adds an edge between two vertices (both directions), e.g. a weld bridge between two meshes.
+		public void Link(int a, int b)
 		{
-			var posMap = new Dictionary<long, List<int>>();
+			if (Adjacency == null || a == b || a < 0 || b < 0 || a >= Adjacency.Length || b >= Adjacency.Length)
+				return;
+			AddEdge(a, b);
+		}
+
+		private void LinkColocatedVertices(Vector3[] vertices, int[] linkGroups)
+		{
+			var groupMaps = new Dictionary<int, Dictionary<long, List<int>>>();
 			for (var i = 0; i < vertices.Length; i++)
 			{
+				int groupId = linkGroups != null ? linkGroups[i] : 0;
+				if (!groupMaps.TryGetValue(groupId, out Dictionary<long, List<int>> posMap))
+				{
+					posMap = new Dictionary<long, List<int>>();
+					groupMaps[groupId] = posMap;
+				}
 				long key = QuantizePosition(vertices[i]);
 				if (!posMap.TryGetValue(key, out List<int> group))
 				{
@@ -43,7 +59,7 @@ namespace BlendShapeEditor
 				group.Add(i);
 			}
 
-			foreach (List<int> group in posMap.Select(pair => pair.Value).Where(group => group.Count >= 2))
+			foreach (List<int> group in groupMaps.Values.SelectMany(map => map.Values).Where(group => group.Count >= 2))
 			{
 				for (var j = 0; j < group.Count; j++)
 				for (int k = j + 1; k < group.Count; k++)
@@ -66,28 +82,51 @@ namespace BlendShapeEditor
 		}
 		
 
-		public void Apply(DeformLayer layer, BrushResult brushResult, Vector3[] vertices, Vector3[] normals, Camera camera)
+		// Smooths the active layer's displacement (not the whole shape): each vertex is pulled toward the
+		// average world displacement of its neighbours. Working in world space rather than averaging raw
+		// bind-space deltas keeps this correct when neighbours have different bone weights.
+		public void Apply(DeformSurface surface, BrushResult brushResult, Camera camera, Dictionary<int, Vector3> displacements)
 		{
-			if (layer == null || brushResult == null || Adjacency == null)
+			List<int>[] adjacency = surface?.Adjacency;
+			if (brushResult == null || adjacency == null)
 				return;
 
-			Vector3[] deltas = layer.Deltas;
+			_layerDispCache.Clear();
 			foreach (KeyValuePair<int, float> pair in brushResult.AffectedVertices)
 			{
 				int vertexIndex = pair.Key;
 				float falloff = pair.Value;
-				if (vertexIndex < 0 || vertexIndex >= deltas.Length)
+				if (!surface.IsValid(vertexIndex) || vertexIndex >= adjacency.Length)
 					continue;
 
-				List<int> neighbors = Adjacency[vertexIndex];
+				List<int> neighbors = adjacency[vertexIndex];
 				if (neighbors.Count == 0)
 					continue;
 
-				Vector3 avg = neighbors.Where(neighbor => neighbor >= 0 && neighbor < deltas.Length).Aggregate(Vector3.zero, (current, neighbor) => current + deltas[neighbor]);
-				avg /= neighbors.Count;
-				deltas[vertexIndex] = Vector3.Lerp(deltas[vertexIndex], avg, falloff);
+				Vector3 avg = Vector3.zero;
+				var count = 0;
+				foreach (int neighbor in neighbors.Where(surface.IsValid))
+				{
+					avg += CachedLayerDisplacement(surface, neighbor);
+					count++;
+				}
+				if (count == 0)
+					continue;
+				avg /= count;
+				Vector3 current = CachedLayerDisplacement(surface, vertexIndex);
+				displacements.AddDisplacement(vertexIndex, (avg - current) * falloff);
 			}
-			layer.Dirty = true;
 		}
+
+		private Vector3 CachedLayerDisplacement(DeformSurface surface, int vertexIndex)
+		{
+			if (_layerDispCache.TryGetValue(vertexIndex, out Vector3 disp))
+				return disp;
+			disp = surface.GetLayerDisplacement(vertexIndex);
+			_layerDispCache[vertexIndex] = disp;
+			return disp;
+		}
+
+		private readonly Dictionary<int, Vector3> _layerDispCache = new Dictionary<int, Vector3>();
 	}
 }

@@ -10,6 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\BrushResult.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\DeformSurface.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\IDeformTool.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\BlobTool.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\ClayStripsTool.cs" />
@@ -23,7 +24,6 @@
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\InflateTool.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\LayerTool.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\MoveTool.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\SelectionTool.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Brush\Tools\SmoothTool.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\BlendShapeCreatorBridge.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\BlendShapeEditorCharaController.cs" />
@@ -39,9 +39,13 @@
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Hooks.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\i18n\i18nKeyAttribute.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\MeshHelper.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Session\EditPart.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Session\EditSession.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Session\MirrorPlane.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\ShapeDeformer.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\BlendShapeEditorPlugin.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\SpatialHashGrid.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\WeldGroups.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\i18n\i18n.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\StilettoBridge.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\UI\Controls\InputHelper.cs" />
@@ -50,6 +54,8 @@
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\UI\ShapeEditorWindow.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\UI\ShapePaintOverlay.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\UI\StudioUI.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\UI\GizmoHandle.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\UI\MirrorPlaneGizmo.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\UI\TransformGizmo.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Undo\DeltaUndoEntry.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Undo\IUndoEntry.cs" />
@@ -57,6 +63,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Undo\LayerRemoveUndoEntry.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Undo\LayerReorderUndoEntry.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Undo\LayerWeightUndoEntry.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Undo\MirrorPlaneUndoEntry.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Undo\StudioUndoBridge.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Undo\UndoContext.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BlendShapeEditor\Undo\UndoStack.cs" />

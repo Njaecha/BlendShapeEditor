@@ -27,7 +27,7 @@ namespace BlendShapeEditor
     {
         public const string GUID = "org.njaecha.plugins.blendshapeeditor";
         public const string PluginName = "BlendShapeEditor";
-        public const string Version = "0.5.2";
+        public const string Version = "0.6.0";
 
         internal new static ManualLogSource Logger;
         public static BlendShapeEditorPlugin Instance;
@@ -46,6 +46,10 @@ namespace BlendShapeEditor
 
         public static ConfigEntry<float> VertexDotSize { get; private set; }
 
+        public static ConfigEntry<float> WeldRadius { get; private set; }
+        public static ConfigEntry<float> MirrorMatchTolerance { get; private set; }
+        public static ConfigEntry<bool> ShowWeldedVertexColor { get; private set; }
+
         #region Colors
 
         public static ConfigEntry<Color> BrushColorMove { get; private set; }
@@ -55,10 +59,16 @@ namespace BlendShapeEditor
         public static ConfigEntry<Color> VertexColorDefault { get; private set; }
         public static ConfigEntry<Color> VertexColorSelected { get; private set; }
         public static ConfigEntry<Color> VertexColorHover { get; private set; }
+        public static ConfigEntry<Color> VertexColorWelded { get; private set; }
+        public static ConfigEntry<Color> VertexColorMirrorPick { get; private set; }
+        public static ConfigEntry<Color> WeldToggleColor { get; private set; }
+        public static ConfigEntry<Color> MirrorConfigColor { get; private set; }
 
         public static ConfigEntry<Color> WireColorDefault { get; private set; }
         public static ConfigEntry<Color> WireColorSelected { get; private set; }
         public static ConfigEntry<Color> WireColorMirror { get; private set; }
+        public static ConfigEntry<Color> MirrorPlaneFillColor { get; private set; }
+        public static ConfigEntry<Color> MirrorPlaneEdgeColor { get; private set; }
 
         public static ConfigEntry<Color> WeightGradientStop0 { get; private set; }
         public static ConfigEntry<Color> WeightGradientStop1 { get; private set; }
@@ -83,6 +93,7 @@ namespace BlendShapeEditor
         public static ConfigEntry<KeyboardShortcut> KeyCycleFalloff { get; private set; }
         public static ConfigEntry<KeyboardShortcut> KeyMirror { get; private set; }
         public static ConfigEntry<KeyboardShortcut> KeyHideOverlay { get; private set; }
+        public static ConfigEntry<KeyboardShortcut> KeyToggleWeld { get; private set; }
 
         public static ConfigEntry<KeyboardShortcut> KeyLayerDown { get; private set; }
         public static ConfigEntry<KeyboardShortcut> KeyLayerUp { get; private set; }
@@ -130,6 +141,14 @@ namespace BlendShapeEditor
                 Config.Bind("Colors - Mesh", "Vertex Hovered", Color.yellow, "Hovered color for vertices");
             VertexColorSelected = Config.Bind("Colors - Mesh", "Vertex Selected", Color.green,
                 "Selected color for vertices");
+            VertexColorWelded = Config.Bind("Colors - Mesh", "Vertex Welded", new Color(1f, 0.5f, 0f),
+                "Base color for vertices that are welded to another nearby vertex");
+            VertexColorMirrorPick = Config.Bind("Colors - Mesh", "Vertex Mirror Pick", new Color(1f, 0.2f, 0.8f),
+                "Color for the vertices picked to place the mirror plane between them");
+            WeldToggleColor = Config.Bind("Colors - Mesh", "Weld Toggle Highlight", new Color(1f, 0.5f, 0f),
+                "Highlight color for the weld toggle button while weld mode is enabled");
+            MirrorConfigColor = Config.Bind("Colors - Mesh", "Mirror Configure Highlight", new Color(0.3f, 0.8f, 1f),
+                "Background tint of the Configure Mirror button and the mirror plane panel while configuring the mirror");
 
             WireColorDefault = Config.Bind("Colors - Mesh", "Wire Default", new Color(0, 0, 0, 0.3f),
                 "Default color for edges");
@@ -137,6 +156,10 @@ namespace BlendShapeEditor
                 "Selected color for edges");
             WireColorMirror = Config.Bind("Colors - Mesh", "Wire Mirrored", new Color(0f, 0.6f, 0.8f, 0.78f),
                 "Color for edges of mirrored vertices when symmetry is enabled");
+            MirrorPlaneFillColor = Config.Bind("Colors - Mesh", "Mirror Plane Fill", new Color(0.2f, 0.7f, 1f, 0.15f),
+                "Fill color of the mirror plane preview while configuring the mirror");
+            MirrorPlaneEdgeColor = Config.Bind("Colors - Mesh", "Mirror Plane Edge", new Color(0.3f, 0.8f, 1f, 0.8f),
+                "Border, grid and normal arrow color of the mirror plane preview while configuring the mirror");
 
             WeightGradientStop0 = Config.Bind("Colors - Weight Gradient", "Primary Stop 0 (weight 0.00)",
                 new Color(0f, 0f, 1f),
@@ -195,9 +218,13 @@ namespace BlendShapeEditor
                 new KeyboardShortcut(KeyCode.M, KeyCode.LeftControl),
                 "Enable Mirroring");
             
-            KeyHideOverlay = Config.Bind("Shortcuts - General", "Hide Overlay", 
-                new KeyboardShortcut(KeyCode.Space), 
+            KeyHideOverlay = Config.Bind("Shortcuts - General", "Hide Overlay",
+                new KeyboardShortcut(KeyCode.Space),
                 "Hide entire vertex and wireframe overlay");
+
+            KeyToggleWeld = Config.Bind("Shortcuts - General", "Toggle Weld",
+                new KeyboardShortcut(KeyCode.None),
+                "Toggle vertex welding");
 
             KeyCycleFalloff = Config.Bind("Shortcuts - General", "Cycle Falloff",
                 new KeyboardShortcut(KeyCode.S, KeyCode.LeftShift),
@@ -303,6 +330,18 @@ namespace BlendShapeEditor
             VertexDotSize = Config.Bind("General", "Vertex Dot Size", 4f,
                 new ConfigDescription("Size of the Dot displayed for each vertex", new AcceptableValueList<float>(2f, 3f, 4f, 5f, 6f)));
 
+            WeldRadius = Config.Bind("General", "Weld Radius", 0.0001f,
+                new ConfigDescription("Distance under which vertices are welded together and treated as a single vertex for selection and movement",
+                    new AcceptableValueRange<float>(0.00001f, 0.005f)));
+            WeldRadius.SettingChanged += (s, e) => ShapePaintOverlay.RebuildAllWeldGroups();
+            MirrorMatchTolerance = Config.Bind("General", "Mirror Match Tolerance", 0.0002f,
+                new ConfigDescription("How far from the exact mirrored position a vertex may be and still count as the mirror partner of a selected vertex in gizmo mode. Raise this if mirroring misses vertices on a slightly asymmetric mesh",
+                    new AcceptableValueRange<float>(0.00001f, 0.01f)));
+
+            ShowWeldedVertexColor = Config.Bind("General", "Show Welded Vertex Color", true,
+                "Highlight welded vertices and edges with the Vertex Welded color. Disable to keep welding active without the visual marking.");
+            ShowWeldedVertexColor.SettingChanged += (s, e) => ShapePaintOverlay.MarkAllWireColorsDirty();
+
             UILanguage = Config.Bind("General", "UI Language", i18n.Language.English, "UI display language");
 
             UndoMaxSteps = Config.Bind("General", "Undo Max Steps", 50,
@@ -336,7 +375,7 @@ namespace BlendShapeEditor
                 SidebarToggle = new SidebarToggle("Blendshape Editor", false, this);
                 e.AddSidebarControl(SidebarToggle).ValueChanged.Subscribe(b =>
                 {
-                    ShapeEditorWindow window = MakerUI.Overlay?.Window;
+                    ShapeEditorWindow window = MakerUI.Overlay ? MakerUI.Overlay.Window : null;
                     if (window != null) window.Visible = SidebarToggle.Value;
                 });
             };

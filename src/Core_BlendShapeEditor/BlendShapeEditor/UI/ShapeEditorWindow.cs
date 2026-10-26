@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using BepInEx.Configuration;
 using JetBrains.Annotations;
@@ -20,12 +21,23 @@ namespace BlendShapeEditor
 		public float BrushStrength { get; set; }
 		public FalloffMode BrushFalloff { get; set; }
 		public bool MirrorEnabled { get; set; }
-		public int MirrorAxisIndex { get; set; }
-		public float MirrorCenter { get; set; }
-		public bool MirrorCenterSet { get; set; }
-		public bool DeferSetMirrorCenter { get; set; }
-		public bool DeferClearMirrorCenter { get; set; }
+		/// While true, the layer list is replaced by the mirror plane controls and brush/gizmo input is suspended.
+		public bool MirrorConfiguring { get; set; }
+		public string[] MirrorSnapTargetNames { get; set; }
+		public int MirrorSnapTargetIndex { get; set; }
+		public int MirrorSnapAxis { get; set; }
+		public int DeferMirrorSnapAxis { get; set; } = -1;
+		public bool DeferMirrorReset { get; set; }
+		/// Plane gizmo mode while configuring: 0 = translate, 1 = rotate.
+		public int MirrorGizmoModeIndex { get; set; }
+		/// "Center between two vertices": clicks in the viewport pick vertices until confirmed or cancelled.
+		public bool MirrorPicking { get; set; }
+		public int MirrorPickCount { get; set; }
+		public bool MirrorPickValid { get; set; }
+		public bool DeferMirrorPickConfirm { get; set; }
 		public int GizmoModeIndex { get; set; }
+		/// Selection-only state: the gizmo is neither drawn nor hit-tested. Toggled by re-picking the active mode.
+		public bool GizmoHidden { get; set; }
 		public int GizmoSpaceIndex { get; set; }
 		public bool GizmoSoftSelection { get; set; }
 		public int SoftSelectModeIndex { get; set; }
@@ -36,7 +48,11 @@ namespace BlendShapeEditor
 		public WireframeDisplayType WireframeDisplayMode { get; set; } = WireframeDisplayType.BackfaceCulling;
 		public VertexDisplayType VertexDisplayMode { get; set; } = VertexDisplayType.BackfaceCulling;
 		public bool OverlayHide { get; set; } = false;
+		public bool WeldEnabled { get; set; }
+		public bool DeferRebuildWeldGroups { get; set; }
 		public bool IsEditMode { get; private set; }
+		/// Renderer whose button in the renderer list is under the mouse, for the mesh highlight.
+		public Renderer HoveredRenderer { get; private set; }
 		public float PreviewWeight { get; set; } = 1f;
 
 		/// When editing an existing shape, keeps PreviewWeight synced to the shape's live weight.
@@ -189,6 +205,7 @@ namespace BlendShapeEditor
 				GUI.color = Color.yellow;
 				GUILayout.Label(i18n.NoLayerWarning);
 				GUI.color = guic;
+				MirrorConfiguring = false;
 				DrawLayerPanel(activeDeformData);
 				GUILayout.FlexibleSpace();
 				DrawPreviewSlider();
@@ -220,10 +237,17 @@ namespace BlendShapeEditor
 			else
 				DrawGizmoControls();
 
-			GUILayout.Space(8f);
-			DrawLayerPanel(activeDeformData);
+			DrawWeldControls();
+			DrawMirrorControls();
+			if (MirrorConfiguring)
+				DrawMirrorConfigPanel();
+			else
+				DrawLayerPanel(activeDeformData);
 			GUILayout.Space(5f);
-			GUILayout.FlexibleSpace();
+			// The mirror panel's list stretches with FlexibleSpace weight itself (see FlexibleExpandHeight), so it
+			// takes exactly the space this FlexibleSpace would take in layer mode.
+			if (!MirrorConfiguring)
+				GUILayout.FlexibleSpace();
 			DrawPreviewSlider();
 			DrawBakeControls();
 		}
@@ -252,9 +276,8 @@ namespace BlendShapeEditor
 
 		private void DrawEditExistingShapeControls()
 		{
-			if (SelectedRendererIndex == -1 || !SelectedRenderer || !(SelectedRenderer is SkinnedMeshRenderer smr) || !smr.sharedMesh)
-				return;
-			int shapeCount = smr.sharedMesh.blendShapeCount;
+			List<string> shapeNames = GetSelectedShapeNames();
+			int shapeCount = shapeNames.Count;
 			if (shapeCount == 0)
 				return;
 			
@@ -285,7 +308,7 @@ namespace BlendShapeEditor
 			_existingShapeScroll = GUILayout.BeginScrollView(_existingShapeScroll, "Box", GUILayout.Height(100f));
 			for (var i = 0; i < shapeCount; i++)
 			{
-				string shapeName = smr.sharedMesh.GetBlendShapeName(i);
+				string shapeName = shapeNames[i];
 				if (filtering && shapeName.IndexOf(_existingShapeFilter, StringComparison.OrdinalIgnoreCase) < 0)
 					continue;
 				Color guic = GUI.color;
@@ -360,18 +383,20 @@ namespace BlendShapeEditor
 
 		private void DrawBrushControls()
 		{
+			// Brush hotkeys are skipped while configuring the mirror: they share keys with the plane gizmo's
+			// Translate/Rotate, and the first Hotkey() check to see a press consumes it.
 			if (!_showAdvancedBrushes)
 			{
 				GUILayout.BeginHorizontal();
 				Color guic = GUI.color;
 				GUI.color = BSE.BrushColorMove.Value;
-				if (Hotkey(BSE.KeyBrushMove) || GUILayout.Toggle(SelectedBrushTool == BrushToolType.Move, new GUIContent(string.Format(i18n.MoveToolLabelFmt, BSE.KeyBrushMove.S()), string.Format(i18n.MoveToolTooltipFmt, BSE.KeyBrushMove.S())), "Button"))
+				if ((!MirrorConfiguring && Hotkey(BSE.KeyBrushMove)) || GUILayout.Toggle(SelectedBrushTool == BrushToolType.Move, new GUIContent(string.Format(i18n.MoveToolLabelFmt, BSE.KeyBrushMove.S()), string.Format(i18n.MoveToolTooltipFmt, BSE.KeyBrushMove.S())), "Button"))
 					SelectedBrushTool = BrushToolType.Move;
 				GUI.color = BSE.BrushColorSmooth.Value;
-				if (Hotkey(BSE.KeyBrushSmooth) || GUILayout.Toggle(SelectedBrushTool == BrushToolType.Smooth, new GUIContent(string.Format(i18n.SmoothToolLabelFmt, BSE.KeyBrushSmooth.S()), string.Format(i18n.SmoothToolTooltipFmt, BSE.KeyBrushSmooth.S())), "Button"))
+				if ((!MirrorConfiguring && Hotkey(BSE.KeyBrushSmooth)) || GUILayout.Toggle(SelectedBrushTool == BrushToolType.Smooth, new GUIContent(string.Format(i18n.SmoothToolLabelFmt, BSE.KeyBrushSmooth.S()), string.Format(i18n.SmoothToolTooltipFmt, BSE.KeyBrushSmooth.S())), "Button"))
 					SelectedBrushTool = BrushToolType.Smooth;
 				GUI.color = BSE.BrushColorInflate.Value;
-				if (Hotkey(BSE.KeyBrushInflate) || GUILayout.Toggle(SelectedBrushTool == BrushToolType.Inflate, new GUIContent(string.Format(i18n.InflateToolLabelFmt, BSE.KeyBrushInflate.S()), string.Format(i18n.InflateToolTooltipFmt, BSE.KeyBrushInflate.S())), "Button"))
+				if ((!MirrorConfiguring && Hotkey(BSE.KeyBrushInflate)) || GUILayout.Toggle(SelectedBrushTool == BrushToolType.Inflate, new GUIContent(string.Format(i18n.InflateToolLabelFmt, BSE.KeyBrushInflate.S()), string.Format(i18n.InflateToolTooltipFmt, BSE.KeyBrushInflate.S())), "Button"))
 					SelectedBrushTool = BrushToolType.Inflate;
 				GUI.color = guic;
 				if (GUILayout.Button(new GUIContent("▼", "Open advanced brush selection"), _smallButtonStyle, GUILayout.Width(20f)))
@@ -426,19 +451,37 @@ namespace BlendShapeEditor
 			if (GUILayout.Toggle(BrushFalloff == FalloffMode.Sharp, i18n.FalloffSharp, "Button"))
 				BrushFalloff = FalloffMode.Sharp;
 			GUILayout.EndHorizontal();
-
-			DrawMirrorControls();
 		}
 		
+		/// A mode button; picking the mode that is already active (button or hotkey) toggles the gizmo off,
+		/// leaving a selection-only state, and picking any mode brings it back.
+		private void DrawGizmoModeToggle(int mode, ConfigEntry<KeyboardShortcut> key, string labelFmt)
+		{
+			bool active = GizmoModeIndex == mode && !GizmoHidden;
+			bool pressed = !MirrorConfiguring && Hotkey(key);
+			if (GUILayout.Toggle(active, string.Format(labelFmt, key.S()), "Button", GUILayout.Width((_windowRect.width-10)/3-10)) != active)
+				pressed = true;
+			if (!pressed)
+				return;
+			if (active)
+			{
+				GizmoHidden = true;
+			}
+			else
+			{
+				GizmoModeIndex = mode;
+				GizmoHidden = false;
+			}
+		}
+
 		private void DrawGizmoControls()
 		{
 			GUILayout.BeginHorizontal();
-			if (Hotkey(BSE.KeyGizmoTranslate) || GUILayout.Toggle(GizmoModeIndex == 0, string.Format(i18n.TranslateLabelFmt, BSE.KeyGizmoTranslate.S()), "Button"))
-				GizmoModeIndex = 0;
-			if (Hotkey(BSE.KeyGizmoRotate) || GUILayout.Toggle(GizmoModeIndex == 1, string.Format(i18n.RotateLabelFmt, BSE.KeyGizmoRotate.S()), "Button"))
-				GizmoModeIndex = 1;
-			if (Hotkey(BSE.KeyGizmoScale) || GUILayout.Toggle(GizmoModeIndex == 2, string.Format(i18n.ScaleLabelFmt, BSE.KeyGizmoScale.S()), "Button"))
-				GizmoModeIndex = 2;
+			DrawGizmoModeToggle(0, BSE.KeyGizmoTranslate, i18n.TranslateLabelFmt);
+			GUILayout.FlexibleSpace();
+			DrawGizmoModeToggle(1, BSE.KeyGizmoRotate, i18n.RotateLabelFmt);
+			GUILayout.FlexibleSpace();
+			DrawGizmoModeToggle(2, BSE.KeyGizmoScale, i18n.ScaleLabelFmt);
 			GUILayout.EndHorizontal();
 
 			if (Hotkey(BSE.KeyGizmoCycleGizmoSpace))
@@ -447,11 +490,13 @@ namespace BlendShapeEditor
 				if (GizmoSpaceIndex > 2) GizmoSpaceIndex = 0;
 			}
 			GUILayout.BeginHorizontal();
-			if (GUILayout.Toggle(GizmoSpaceIndex == 0, new GUIContent(i18n.WorldSpace, string.Format(i18n.WorldSpaceTooltipFmt, BSE.KeyGizmoCycleGizmoSpace)), "Button"))
+			if (GUILayout.Toggle(GizmoSpaceIndex == 0, new GUIContent(i18n.WorldSpace, string.Format(i18n.WorldSpaceTooltipFmt, BSE.KeyGizmoCycleGizmoSpace)), "Button", GUILayout.Width((_windowRect.width-10)/3-10)))
 				GizmoSpaceIndex = 0;
-			if (GUILayout.Toggle(GizmoSpaceIndex == 1, new GUIContent(i18n.ObjectSpace, string.Format(i18n.ObjectSpaceTooltipFmt, BSE.KeyGizmoCycleGizmoSpace)), "Button"))
+			GUILayout.FlexibleSpace();
+			if (GUILayout.Toggle(GizmoSpaceIndex == 1, new GUIContent(i18n.ObjectSpace, string.Format(i18n.ObjectSpaceTooltipFmt, BSE.KeyGizmoCycleGizmoSpace)), "Button", GUILayout.Width((_windowRect.width-10)/3-10)))
 				GizmoSpaceIndex = 1;
-			if (GUILayout.Toggle(GizmoSpaceIndex == 2, new GUIContent(i18n.NormalSpace, string.Format(i18n.NormalSpaceTooltipFmt, BSE.KeyGizmoCycleGizmoSpace)), "Button"))
+			GUILayout.FlexibleSpace();
+			if (GUILayout.Toggle(GizmoSpaceIndex == 2, new GUIContent(i18n.NormalSpace, string.Format(i18n.NormalSpaceTooltipFmt, BSE.KeyGizmoCycleGizmoSpace)), "Button", GUILayout.Width((_windowRect.width-10)/3-10)))
 				GizmoSpaceIndex = 2;
 			GUILayout.EndHorizontal();
 			
@@ -494,8 +539,6 @@ namespace BlendShapeEditor
 					GizmoFalloff = FalloffMode.Sharp;
 				GUILayout.EndHorizontal();
 			}
-
-			DrawMirrorControls();
 
 			if (!BSE.ShowDebuggingControls.Value) return;
 			// section for debugging and diagnostics controls
@@ -549,6 +592,22 @@ namespace BlendShapeEditor
 			GUILayout.EndHorizontal();
 		}
 
+		private void DrawWeldControls()
+		{
+			Color guic = GUI.color;
+			GUILayout.BeginHorizontal();
+			if (WeldEnabled) GUI.color = BSE.WeldToggleColor.Value;
+			string weldButtonLabel = WeldEnabled ? i18n.WeldToggleButtonOnFmt : i18n.WeldToggleButtonOffFmt;
+			if (Hotkey(BSE.KeyToggleWeld) || GUILayout.Button(new GUIContent(weldButtonLabel, i18n.WeldToggleTooltip), GUILayout.ExpandWidth(true)))
+			{
+				WeldEnabled = !WeldEnabled;
+				if (WeldEnabled) DeferRebuildWeldGroups = true;
+			}
+			GUI.color = guic;
+			GUILayout.Label($"[{BSE.KeyToggleWeld.S()}]", _labelTextRightStyle, GUILayout.ExpandWidth(false));
+			GUILayout.EndHorizontal();
+		}
+
 		private void DrawMirrorControls()
 		{
 			if (Hotkey(BSE.KeyMirror)) MirrorEnabled = !MirrorEnabled;
@@ -557,27 +616,96 @@ namespace BlendShapeEditor
 			GUILayout.Label($"[{BSE.KeyMirror.S()}]", _labelTextRightStyle);
 			GUILayout.EndHorizontal();
 			if (!MirrorEnabled)
+			{
+				MirrorConfiguring = false;
 				return;
+			}
+			Color prevBackground = GUI.backgroundColor;
+			if (MirrorConfiguring) GUI.backgroundColor = BSE.MirrorConfigColor.Value;
+			MirrorConfiguring = GUILayout.Toggle(MirrorConfiguring,
+				new GUIContent(MirrorConfiguring ? i18n.MirrorConfigureClose : i18n.MirrorConfigure, i18n.MirrorConfigureTooltip), "Button");
+			GUI.backgroundColor = prevBackground;
+		}
+
+		/// Shown in place of the layer list while configuring; tinted so it reads as one menu with the toggle above.
+		private void DrawMirrorConfigPanel()
+		{
+			Color prevBackground = GUI.backgroundColor;
+			GUI.backgroundColor = BSE.MirrorConfigColor.Value;
+			GUILayout.BeginVertical(GUI.skin.box);
+			GUI.backgroundColor = prevBackground;
+			GUILayout.Label(i18n.MirrorPlaneHeader, "Box");
 
 			GUILayout.BeginHorizontal();
-			GUILayout.Label(i18n.SymmetryAxis, GUILayout.Width(30f));
-			if (GUILayout.Toggle(MirrorAxisIndex == 0, "X", "Button"))
-				MirrorAxisIndex = 0;
-			if (GUILayout.Toggle(MirrorAxisIndex == 1, "Y", "Button"))
-				MirrorAxisIndex = 1;
-			if (GUILayout.Toggle(MirrorAxisIndex == 2, "Z", "Button"))
-				MirrorAxisIndex = 2;
+			GUILayout.Label(new GUIContent(i18n.MirrorGizmoLabel, i18n.MirrorGizmoTooltip));
+			GUILayout.FlexibleSpace();
+			if (Hotkey(BSE.KeyGizmoTranslate) || GUILayout.Toggle(MirrorGizmoModeIndex == 0, new GUIContent(string.Format(i18n.TranslateLabelFmt, BSE.KeyGizmoTranslate.S()), i18n.MirrorGizmoTooltip), "Button"))
+				MirrorGizmoModeIndex = 0;
+			if (Hotkey(BSE.KeyGizmoRotate) || GUILayout.Toggle(MirrorGizmoModeIndex == 1, new GUIContent(string.Format(i18n.RotateLabelFmt, BSE.KeyGizmoRotate.S()), i18n.MirrorGizmoTooltip), "Button"))
+				MirrorGizmoModeIndex = 1;
 			GUILayout.EndHorizontal();
+			GUILayout.Space(5f);
 
-			if (MirrorCenterSet)
-				GUILayout.Label(string.Format(i18n.MirrorCenterFmt, MirrorCenter));
+			GUILayout.Label(new GUIContent(i18n.MirrorCenterLabel, i18n.MirrorCenterTooltip));
+			if (!MirrorPicking)
+			{
+				if (GUILayout.Button(new GUIContent(i18n.MirrorPickStart, i18n.MirrorPickStartTooltip)))
+					MirrorPicking = true;
+			}
+			else
+			{
+				GUILayout.Label(string.Format(i18n.MirrorPickCountFmt, MirrorPickCount));
+				GUILayout.BeginHorizontal();
+				bool prevEnabled = GUI.enabled;
+				GUI.enabled = prevEnabled && MirrorPickValid;
+				if (GUILayout.Button(i18n.MirrorPickConfirm))
+					DeferMirrorPickConfirm = true;
+				GUI.enabled = prevEnabled;
+				if (GUILayout.Button(i18n.MirrorPickCancel))
+					MirrorPicking = false;
+				GUILayout.EndHorizontal();
+			}
+			GUILayout.Space(5f);
 
-			GUILayout.BeginHorizontal();
-			if (GUILayout.Button(i18n.SetCenter))
-				DeferSetMirrorCenter = true;
-			if (GUILayout.Button(i18n.ClearCenter))
-				DeferClearMirrorCenter = true;
-			GUILayout.EndHorizontal();
+			string[] names = MirrorSnapTargetNames;
+			int count = names?.Length ?? 0;
+			if (count > 0)
+			{
+				// Axis is a sticky choice; clicking a transform in the list snaps the plane to it on that axis
+				GUILayout.BeginHorizontal();
+				GUILayout.Label(new GUIContent(i18n.MirrorSnapLabel, i18n.MirrorSnapTooltip));
+				GUILayout.FlexibleSpace();
+				if (GUILayout.Toggle(MirrorSnapAxis == 0, new GUIContent("X", i18n.MirrorSnapTooltip), "Button", GUILayout.Width(25f)))
+					MirrorSnapAxis = 0;
+				if (GUILayout.Toggle(MirrorSnapAxis == 1, new GUIContent("Y", i18n.MirrorSnapTooltip), "Button", GUILayout.Width(25f)))
+					MirrorSnapAxis = 1;
+				if (GUILayout.Toggle(MirrorSnapAxis == 2, new GUIContent("Z", i18n.MirrorSnapTooltip), "Button", GUILayout.Width(25f)))
+					MirrorSnapAxis = 2;
+				GUILayout.EndHorizontal();
+				// No MinHeight on the scroll view: IMGUI turns any min/max height option into a max height, which
+				// disables stretching. A zero-width 50px strut beside it provides the minimum instead.
+				GUILayout.BeginHorizontal(FlexibleExpandHeight);
+				GUILayoutUtility.GetRect(0f, 50f, GUILayout.Width(0f));
+				_mirrorSnapScroll = GUILayout.BeginScrollView(_mirrorSnapScroll, "Box", FlexibleExpandHeight);
+				for (var i = 0; i < count; i++)
+				{
+					if (GUILayout.Button(new GUIContent(names[i], i18n.MirrorSnapTooltip)))
+					{
+						MirrorSnapTargetIndex = i;
+						DeferMirrorSnapAxis = MirrorSnapAxis;
+					}
+				}
+				GUILayout.EndScrollView();
+				GUILayout.EndHorizontal();
+			}
+			else
+			{
+				GUILayout.FlexibleSpace();
+			}
+			
+			if (GUILayout.Button(new GUIContent(i18n.MirrorReset, i18n.MirrorResetTooltip)))
+				DeferMirrorReset = true;
+			GUILayout.EndVertical();
 		}
 
 		private void DrawLayerPanel(DeformData data)
@@ -750,7 +878,7 @@ namespace BlendShapeEditor
 			
 			ShowMeshHighlight = GUILayout.Toggle(ShowMeshHighlight, i18n.ShowMeshHighlight);
 			GUILayout.BeginHorizontal();
-			GUILayout.Label(i18n.TargetMesh);
+			GUILayout.Label(new GUIContent(i18n.TargetMesh, i18n.TargetMeshTooltip));
 			if (IsEditMode)
 			{
 				if (GUILayout.Button(i18n.CollapseRendererPanel))
@@ -766,12 +894,18 @@ namespace BlendShapeEditor
 				DeferRefreshRenderers = true;
 			}
 			GUILayout.EndHorizontal();
+			int selectedCount = GetSelectedRenderers().Count;
+			// Always shown (hint or count) so the list below doesn't jump when a second renderer is added.
+			GUILayout.Label(selectedCount > 1 ? string.Format(i18n.MultiRendererSelectedFmt, selectedCount) : i18n.MultiRendererHint);
 			
 			bool filtering = !string.IsNullOrEmpty(_rendererFilter);
 			bool prev = GUI.enabled;
-			if (IsEditMode)
-				GUI.enabled = false;
+			// The selection is fixed while editing; the session was built from it.
+			bool listEnabled = !IsEditMode;
+			GUI.enabled = listEnabled;
 
+			bool repaint = Event.current.type == EventType.Repaint;
+			Renderer hoverCandidate = null;
 			_rendererScroll = GUILayout.BeginScrollView(_rendererScroll, "Box", GUILayout.ExpandHeight(true));
 			for (var i = 0; i < Renderers.Count; i++)
 			{
@@ -792,11 +926,20 @@ namespace BlendShapeEditor
 				}
 				Color guic = GUI.color;
 				GUILayout.BeginHorizontal();
-				if (SelectedRendererIndex == i) GUI.color = Color.cyan;
-				if (GUILayout.Toggle(SelectedRendererIndex == i, name, "Button"))
-					SelectedRendererIndex = i;
+				bool isSelected = IsRendererSelected(i);
+				if (isSelected) GUI.color = Color.cyan;
+				if (GUILayout.Toggle(isSelected, name, "Button") != isSelected)
+				{
+					if (Event.current.control)
+						ToggleRendererInSelection(i);
+					else
+						SelectSingleRenderer(i);
+				}
+				// Inside the scroll view, mouse position and layout rects share content coordinates
+				if (repaint && GUILayoutUtility.GetLastRect().Contains(Event.current.mousePosition))
+					hoverCandidate = Renderers[i];
 				GUI.color = guic;
-				GUI.enabled = true;
+				GUI.enabled = listEnabled;
 				if (blendShapeCount > 0)
 				{
 					GUI.color = _exitingShapeIndicatorColor;
@@ -806,9 +949,12 @@ namespace BlendShapeEditor
 				GUILayout.EndHorizontal();
 			}
 			GUILayout.EndScrollView();
+			// Only counts while the mouse is inside the visible scroll area; a button scrolled out of view can
+			// otherwise still contain the (content-space) mouse position.
+			if (repaint)
+				HoveredRenderer = hoverCandidate && GUILayoutUtility.GetLastRect().Contains(Event.current.mousePosition) ? hoverCandidate : null;
 
-			if (IsEditMode)
-				GUI.enabled = prev;
+			GUI.enabled = prev;
 		}
 
 		public void IncrementBakeShapeName()
@@ -972,6 +1118,26 @@ namespace BlendShapeEditor
 		private GUIStyle _smallButtonStyle;
 		private Vector2 _layerScroll;
 		private Vector2 _rendererScroll;
+		private Vector2 _mirrorSnapScroll;
+
+		/// ExpandHeight with the weight GUILayout.FlexibleSpace uses (10000 instead of 1), so an element can win
+		/// the free height against FlexibleSpaces and other ExpandHeight lists like FlexibleSpace itself does.
+		private static readonly GUILayoutOption FlexibleExpandHeight = CreateFlexibleExpandHeight();
+
+		private static GUILayoutOption CreateFlexibleExpandHeight()
+		{
+			GUILayoutOption option = GUILayout.ExpandHeight(true);
+			try
+			{
+				FieldInfo value = typeof(GUILayoutOption).GetField("value", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+				value?.SetValue(option, 10000);
+			}
+			catch (Exception)
+			{
+				// Falls back to the normal weight; the list then just grows less eagerly
+			}
+			return option;
+		}
 		private string _rendererFilter = "";
 		private bool _showExistingShapeList;
 		private Vector2 _existingShapeScroll;
@@ -1008,8 +1174,87 @@ namespace BlendShapeEditor
 		public float WeightUndoAfter;
 
 		public List<Renderer> Renderers = new List<Renderer>();
+		/// The renderer clicked last (the only one unless more were Ctrl+clicked).
 		public int SelectedRendererIndex = -1;
 		public Renderer SelectedRenderer => Renderers[Mathf.Clamp(SelectedRendererIndex, 0, Renderers.Count - 1)];
+
+		/// Every selected renderer that can be edited, SelectedRenderer first. Ctrl+clicked renderers are
+		/// kept by reference, so a refreshed renderer list drops the ones that are no longer in it.
+		public List<Renderer> GetSelectedRenderers()
+		{
+			var result = new List<Renderer>();
+			if (SelectedRendererIndex < 0 || SelectedRendererIndex >= Renderers.Count)
+				return result;
+			Renderer primary = Renderers[SelectedRendererIndex];
+			if (primary)
+				result.Add(primary);
+			foreach (Renderer r in Renderers)
+				if (r && r != primary && _extraSelectedRenderers.Contains(r))
+					result.Add(r);
+			return result;
+		}
+
+		private bool IsRendererSelected(int index)
+		{
+			if (SelectedRendererIndex < 0 || SelectedRendererIndex >= Renderers.Count)
+				return false;
+			return index == SelectedRendererIndex || _extraSelectedRenderers.Contains(Renderers[index]);
+		}
+
+		private void SelectSingleRenderer(int index)
+		{
+			SelectedRendererIndex = index;
+			_extraSelectedRenderers.Clear();
+		}
+
+		private void ToggleRendererInSelection(int index)
+		{
+			Renderer r = Renderers[index];
+			if (SelectedRendererIndex < 0 || SelectedRendererIndex >= Renderers.Count)
+			{
+				SelectSingleRenderer(index);
+				return;
+			}
+			if (index != SelectedRendererIndex)
+			{
+				if (!_extraSelectedRenderers.Remove(r))
+					_extraSelectedRenderers.Add(r);
+				return;
+			}
+			// Deselecting the primary: promote another selected renderer, or clear the selection.
+			Renderer next = GetSelectedRenderers().Find(x => x != r);
+			if (next)
+			{
+				_extraSelectedRenderers.Remove(next);
+				SelectedRendererIndex = Renderers.IndexOf(next);
+			}
+			else
+			{
+				SelectedRendererIndex = -1;
+			}
+		}
+
+		/// Blendshape names across every selected skinned renderer, in first-seen order.
+		private List<string> GetSelectedShapeNames()
+		{
+			var names = new List<string>();
+			var seen = new HashSet<string>();
+			foreach (Renderer r in GetSelectedRenderers())
+			{
+				if (!(r is SkinnedMeshRenderer smr) || !smr.sharedMesh)
+					continue;
+				Mesh mesh = smr.sharedMesh;
+				for (var i = 0; i < mesh.blendShapeCount; i++)
+				{
+					string shapeName = mesh.GetBlendShapeName(i);
+					if (seen.Add(shapeName))
+						names.Add(shapeName);
+				}
+			}
+			return names;
+		}
+
+		private readonly HashSet<Renderer> _extraSelectedRenderers = new HashSet<Renderer>();
 		public DeformData ActiveDeformData;
 		public int VertexCount;
 

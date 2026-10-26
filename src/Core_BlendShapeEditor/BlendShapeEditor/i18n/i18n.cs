@@ -22,6 +22,9 @@ namespace BlendShapeEditor
         public static string MaterialEditorNoRenderers;
         public static string ShowMeshHighlight;
         public static string TargetMesh;
+        public static string TargetMeshTooltip;
+        public static string MultiRendererSelectedFmt;
+        public static string MultiRendererHint;
         public static string ExpandRendererPanel;
         public static string CollapseRendererPanel;
         public static string RefreshRenderers;
@@ -111,12 +114,31 @@ namespace BlendShapeEditor
         public static string OverlayHideButton;
         public static string OverlayHideTooltip;
 
+        // Weld
+        public static string WeldToggleButtonOnFmt;
+        public static string WeldToggleButtonOffFmt;
+        public static string WeldToggleTooltip;
+
         // Symmetry
         public static string Mirror;
-        public static string SymmetryAxis;
-        public static string SetCenter;
-        public static string ClearCenter;
-        public static string MirrorCenterFmt;
+        public static string MirrorConfigure;
+        public static string MirrorConfigureTooltip;
+        public static string MirrorPlaneHeader;
+        public static string MirrorGizmoLabel;
+        public static string MirrorGizmoTooltip;
+        public static string MirrorSnapLabel;
+        public static string MirrorSnapTooltip;
+        public static string MirrorObjectRoot;
+        public static string MirrorReset;
+        public static string MirrorResetTooltip;
+        public static string MirrorConfigureClose;
+        public static string MirrorCenterLabel;
+        public static string MirrorCenterTooltip;
+        public static string MirrorPickStart;
+        public static string MirrorPickStartTooltip;
+        public static string MirrorPickCountFmt;
+        public static string MirrorPickConfirm;
+        public static string MirrorPickCancel;
 
         // Layers
         public static string Layers;

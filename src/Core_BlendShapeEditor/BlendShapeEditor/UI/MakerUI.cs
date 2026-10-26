@@ -20,7 +20,6 @@ namespace BlendShapeEditor
 			_overlayGo = new GameObject("KKBlendShapeEditor_MakerOverlay");
 			_overlay = _overlayGo.AddComponent<ShapePaintOverlay>();
 			_overlay.Window = _window;
-			_overlay.SelectionTool = new SelectionTool();
 			_overlay.Input = new InputHelper();
 			_overlay.Input.Init();
 			_overlay.OnRefreshRenderers = RefreshRenderers;

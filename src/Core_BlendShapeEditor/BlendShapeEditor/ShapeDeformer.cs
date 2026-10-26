@@ -12,10 +12,20 @@ namespace BlendShapeEditor
 	{
 		public DeformData DeformData { get; set; }
 
+		/// Where this renderer's vertices start inside DeformData's (possibly multi-renderer) layer deltas,
+		/// and the total delta length expected. DeltaTotalCount < 0 means "just this mesh".
+		public int DeltaOffset { get; set; }
+		public int DeltaTotalCount { get; set; } = -1;
+
 		public void InvalidateDeltaCache()
 		{
-			_cachedFinalDeltas = null;
+			DeformData?.InvalidateDisplayDelta();
 		}
+
+		public bool HasBlendShape(string shapeName) => ExistingBlendShapeNames.Contains(shapeName);
+
+		/// True while an existing blendshape imported via ImportBlendShapeAsLayer is being edited.
+		public bool IsEditingExistingShape => _editingExistingShapeIndex >= 0;
 
 		public bool StudioMode { get; set; }
 		public static bool ForceBakePath = false;
@@ -66,7 +76,7 @@ namespace BlendShapeEditor
 			}
 
 			if (_smr == smr && _sourceMeshId != meshId)
-				_cachedFinalDeltas = null;
+				InvalidateDeltaCache();
 
 			if (_displayGo)
 				DestroyImmediate(_displayGo);
@@ -225,7 +235,7 @@ namespace BlendShapeEditor
 				return;
 
 			if (_sourceMeshFilter == sourceMf && _sourceMeshId != meshId)
-				_cachedFinalDeltas = null;
+				InvalidateDeltaCache();
 
 			_sourceMeshId = meshId;
 			if (_displayGo)
@@ -459,21 +469,22 @@ namespace BlendShapeEditor
 
 			if (hasLayers)
 			{
-				if (DeformData.AnyDirty() || _cachedFinalDeltas == null)
-					_cachedFinalDeltas = DeformData.ComputeFinalDelta(respectHidden: true);
+				_cachedFinalDeltas = DeformData.GetDisplayDelta();
+				int expectedLength = DeltaTotalCount >= 0 ? DeltaTotalCount : workingVerts.Length;
 
-				if (_cachedFinalDeltas != null && _cachedFinalDeltas.Length == workingVerts.Length)
+				if (_cachedFinalDeltas != null && _cachedFinalDeltas.Length == expectedLength
+				    && DeltaOffset >= 0 && DeltaOffset + workingVerts.Length <= expectedLength)
 				{
 					if (isSkinned && _boneWeights != null && _boneMatrices != null)
 					{
 						if (!StudioMode)
 							ComputeBoneMatrices();
-						ApplySkinnedDeltas(workingVerts, _cachedFinalDeltas, PreviewMultiplier);
+						ApplySkinnedDeltas(workingVerts, _cachedFinalDeltas, DeltaOffset, PreviewMultiplier);
 					}
 					else
 					{
 						for (int i = 0; i < workingVerts.Length; i++)
-							workingVerts[i] += _cachedFinalDeltas[i] * PreviewMultiplier;
+							workingVerts[i] += _cachedFinalDeltas[DeltaOffset + i] * PreviewMultiplier;
 					}
 				}
 				else if (_cachedFinalDeltas != null && !_loggedDeltaMismatch)
@@ -481,7 +492,7 @@ namespace BlendShapeEditor
 					_loggedDeltaMismatch = true;
 					string meshName = isSkinned ? _smr ? _smr.name : "?" : _sourceMeshFilter ? _sourceMeshFilter.name : "?";
 					BlendShapeEditorPlugin.Logger.LogWarning(
-						$"DoDeformation: delta length mismatch (deltaLen={_cachedFinalDeltas.Length}, vertsLen={workingVerts.Length}, mesh='{meshName}')");
+						$"DoDeformation: delta length mismatch (deltaLen={_cachedFinalDeltas.Length}, expected={expectedLength}, offset={DeltaOffset}, vertsLen={workingVerts.Length}, mesh='{meshName}')");
 				}
 			}
 
@@ -706,18 +717,22 @@ namespace BlendShapeEditor
 			}
 		}
 
-		private void ApplySkinnedDeltas(Vector3[] verts, Vector3[] deltas, float scale = 1f)
+		private void ApplySkinnedDeltas(Vector3[] verts, Vector3[] deltas, int deltaOffset, float scale = 1f)
 		{
 			if (_boneWeights == null || _boneMatrices == null)
 			{
 				for (var i = 0; i < verts.Length; i++)
-					verts[i] += deltas[i] * scale;
+					verts[i] += deltas[deltaOffset + i] * scale;
 				return;
 			}
 
+			// StudioMode bone matrices are world-space (see ComputeCPUSkinning) while verts are renderer-local,
+			// so bring the skinned delta into the same space. Maker's matrices already include worldToLocal.
+			bool toLocal = StudioMode && _smr;
+			Matrix4x4 worldToLocal = toLocal ? _smr.transform.worldToLocalMatrix : Matrix4x4.identity;
 			for (var j = 0; j < verts.Length; j++)
 			{
-				Vector3 delta = deltas[j];
+				Vector3 delta = deltas[deltaOffset + j];
 				if (delta.x == 0f && delta.y == 0f && delta.z == 0f)
 					continue;
 
@@ -731,6 +746,8 @@ namespace BlendShapeEditor
 					skinned += _boneMatrices[bw.boneIndex2].MultiplyVector(delta) * bw.weight2;
 				if (bw.weight3 > 0f)
 					skinned += _boneMatrices[bw.boneIndex3].MultiplyVector(delta) * bw.weight3;
+				if (toLocal)
+					skinned = worldToLocal.MultiplyVector(skinned);
 				verts[j] += skinned * scale;
 			}
 		}
@@ -756,6 +773,31 @@ namespace BlendShapeEditor
 			AccumulateBoneMatrix(ref M, bw.boneIndex3, bw.weight3);
 			Vector3 localDisp = StudioMode ? worldDisp : (transform ? transform.InverseTransformVector(worldDisp) : worldDisp);
 			bindDelta = M.inverse.MultiplyVector(localDisp);
+			return true;
+		}
+
+		/// Exact inverse of WorldDeltaToBindDelta: the world-space displacement a stored bind-space delta produces.
+		public bool BindDeltaToWorldDelta(int vertexIdx, Vector3 bindDelta, out Vector3 worldDisp)
+		{
+			Transform transform = _smr ? _smr.transform
+				: _sourceMeshFilter ? _sourceMeshFilter.transform
+				: _sourceMeshRenderer ? _sourceMeshRenderer.transform
+				: null;
+
+			if (_boneWeights == null || _boneMatrices == null || vertexIdx < 0 || vertexIdx >= _boneWeights.Length)
+			{
+				worldDisp = transform ? transform.TransformVector(bindDelta) : bindDelta;
+				return false;
+			}
+
+			BoneWeight bw = _boneWeights[vertexIdx];
+			Matrix4x4 M = Matrix4x4.zero;
+			AccumulateBoneMatrix(ref M, bw.boneIndex0, bw.weight0);
+			AccumulateBoneMatrix(ref M, bw.boneIndex1, bw.weight1);
+			AccumulateBoneMatrix(ref M, bw.boneIndex2, bw.weight2);
+			AccumulateBoneMatrix(ref M, bw.boneIndex3, bw.weight3);
+			Vector3 localDisp = M.MultiplyVector(bindDelta);
+			worldDisp = StudioMode ? localDisp : (transform ? transform.TransformVector(localDisp) : localDisp);
 			return true;
 		}
 
@@ -1014,7 +1056,7 @@ namespace BlendShapeEditor
 		private int _sourceMeshId;                     // GetInstanceID() of the mesh at Init time; detects hot-swap
 		private List<Vector3> _bakedVertsList;         // reused list for BakeMesh vertex readback (avoids array alloc)
 		private List<Vector3> _bakedNormalsList;       // reused list for BakeMesh normal readback
-		private Vector3[] _cachedFinalDeltas;          // result of DeformData.ComputeFinalDelta(), invalidated on dirty
+		private Vector3[] _cachedFinalDeltas;          // DeformData.GetDisplayDelta() for this frame (shared buffer, read-only)
 		private bool _loggedDeltaMismatch;             // rate-limit for the delta-length mismatch warning
 
 		// --- Edit-mode overlay ---
@@ -1023,26 +1065,10 @@ namespace BlendShapeEditor
 		private Color[] _editColors;                   // per-vertex colors written to _bakedMesh to show brush influence
 		
 		/// <summary>
-		/// Bakes the current combined deformation into a new blendshape on the SMR's mesh.
+		/// Bakes the given deltas (this renderer's slice, in bind space) into a new blendshape on the SMR's mesh.
 		/// Returns if the baking was successful.
 		/// Also returns the delta arrays used for BSC registration.
 		/// </summary>
-		public bool BakeToBlendShape(string shapeName, out Vector3[] outDeltaVerts, out Vector3[] outDeltaNormals,
-			bool computeDeltaNormals = true)
-		{
-			outDeltaVerts = null;
-			outDeltaNormals = null;
-
-			if (DeformData == null || !DeformData.HasLayers)
-			{
-				BSE.Logger.LogWarning("BakeToBlendShape: no layers to bake");
-				return false;
-			}
-
-			BakeToBlendShape(shapeName, DeformData.ComputeFinalDelta(), out outDeltaVerts, out outDeltaNormals, computeDeltaNormals);
-			return true;
-		}
-
 		public bool BakeToBlendShape(string shapeName, Vector3[] delta, out Vector3[] outDeltaVerts, out Vector3[] outDeltaNormals,
 			bool computeDeltaNormals = true)
 		{
