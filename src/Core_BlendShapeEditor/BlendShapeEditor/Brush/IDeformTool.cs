@@ -12,6 +12,11 @@ namespace BlendShapeEditor
 		void Apply(DeformSurface surface, BrushResult brushResult, Camera camera, Dictionary<int, Vector3> displacements);
 	}
 
+	public interface IMirrorAware
+	{
+		MirrorPlane Mirror { get; set; }
+	}
+
 	public static class DisplacementExtensions
 	{
 		public static void AddDisplacement(this Dictionary<int, Vector3> displacements, int vertexIndex, Vector3 displacement)

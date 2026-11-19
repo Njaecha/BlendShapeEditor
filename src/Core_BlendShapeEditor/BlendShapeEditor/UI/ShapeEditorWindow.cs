@@ -410,7 +410,7 @@ namespace BlendShapeEditor
 				string[] brushNames = {
 					"Move", "Smooth", "Inflate", "Draw", "DrawS",
 					"Blob", "Clay", "ClStrp", "ClThmb",
-					"Crease", "Layer", "Fill", "Flatten"
+					"Crease", "Layer", "Fill", "Flatten", "Move2D"
 				};
 				int selected = (int)SelectedBrushTool;
 				int newSelected = GUILayout.SelectionGrid(selected, brushNames, 4);
@@ -1278,7 +1278,8 @@ namespace BlendShapeEditor
 			Crease,
 			Layer,
 			Fill,
-			Flatten
+			Flatten,
+			Move2D
 		}
 
 		public enum VertexDisplayType

@@ -3,12 +3,13 @@ using UnityEngine;
 
 namespace BlendShapeEditor
 {
-    public class ClayTool : IDeformTool
+    public class ClayTool : IDeformTool, IMirrorAware
     {
         public float Direction { get; set; } = 1f;
         public Vector3 StrokePlaneOrigin { get; set; }
         public Vector3 StrokePlaneNormal { get; set; }
         public bool StrokeStarted { get; set; }
+        public MirrorPlane Mirror { get; set; }
 
         public void Apply(DeformSurface surface, BrushResult brushResult, Camera camera,
             Dictionary<int, Vector3> displacements)
@@ -22,6 +23,11 @@ namespace BlendShapeEditor
 
             Vector3 planeOrigin = StrokeStarted ? StrokePlaneOrigin : brushResult.HitPoint;
             Vector3 planeNormal = StrokeStarted ? StrokePlaneNormal : brushResult.HitNormal.normalized;
+            if (Mirror != null && StrokeStarted)
+            {
+                planeOrigin = Mirror.ReflectPoint(planeOrigin);
+                planeNormal = Mirror.ReflectVector(planeNormal);
+            }
 
             float targetOffset = 0.001f * dir;
 

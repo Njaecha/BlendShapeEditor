@@ -370,6 +370,8 @@ namespace BlendShapeEditor
 			_undoStack = new UndoStack(BlendShapeEditorPlugin.UndoMaxSteps.Value);
 			if (_moveTool == null)
 				_moveTool = new MoveTool();
+			if (_move2DTool == null)
+				_move2DTool = new MoveTool();
 			if (_smoothTool == null)
 				_smoothTool = new SmoothTool();
 			if (_inflateTool == null)
@@ -1270,11 +1272,13 @@ namespace BlendShapeEditor
 			if (ShapeEditorWindow.IsMouseOverUI)
 			{
 				_hasHit = false;
+				_hasProjectedHit = false;
 				_hoverVertexIndex = -1;
 				return;
 			}
 			Ray ray = main.ScreenPointToRay(InputHelper.MousePosition);
 			_hasHit = _session.Raycast(ray, out _lastHitPoint, out _lastHitNormal);
+			_hasProjectedHit = _hasHit || (Window.SelectedBrushTool == ShapeEditorWindow.BrushToolType.Move2D && _session.AnyVertexInProjectedRadius(ray));
 
 			
 
@@ -1319,7 +1323,7 @@ namespace BlendShapeEditor
 				return;
 
 			// change brush with scroll wheel
-			if (_hasHit || _isBrushing)
+			if (_hasProjectedHit || _isBrushing)
 			{
 				float delta = InputHelper.MouseScrollDelta.y;
 				if (e.alt)
@@ -1339,7 +1343,7 @@ namespace BlendShapeEditor
 			}
 			
 			// user left-clicked on model
-			if (e.type == EventType.MouseDown && e.button == 0 && _hasHit)
+			if (e.type == EventType.MouseDown && e.button == 0 && _hasProjectedHit)
 			{
 				_isBrushing = true;
 				_brushBeforeSnapshot = new Dictionary<int, Vector3>();
@@ -1393,6 +1397,7 @@ namespace BlendShapeEditor
 			if (!(activeTool is MoveTool))
 				activeTool.Direction = direction;
 
+			bool projectedBrush = ReferenceEquals(activeTool, _move2DTool);
 			BrushResult brushResult;
 
 			if (activeTool is MoveTool moveTool)
@@ -1401,10 +1406,11 @@ namespace BlendShapeEditor
 				if (_moveGrabVertices == null)
 				{
 					Ray ray = cam.ScreenPointToRay(InputHelper.MousePosition);
-					BrushResult initialResult = _session.BrushSelect(ray);
+					BrushResult initialResult = projectedBrush ? _session.BrushSelectProjected(ray) : _session.BrushSelect(ray);
 					if (initialResult == null || initialResult.AffectedVertices.Count == 0)
 						return;
 					_moveGrabVertices = new Dictionary<int, float>(initialResult.AffectedVertices);
+					_moveGrabRay = ray;
 					_moveGrabResult = new BrushResult
 					{
 						HitPoint = initialResult.HitPoint,
@@ -1413,7 +1419,7 @@ namespace BlendShapeEditor
 					};
 				}
 				brushResult = _moveGrabResult;
-				moveTool.UseViewPlane = !e.alt;
+				moveTool.UseViewPlane = projectedBrush || !e.alt;
 				Vector3 hitScreen = cam.WorldToScreenPoint(brushResult.HitPoint);
 				Vector3 hitWorld = cam.ScreenToWorldPoint(hitScreen);
 				Vector3 hitWorldOffset = cam.ScreenToWorldPoint(new Vector3(hitScreen.x + 1f, hitScreen.y, hitScreen.z));
@@ -1492,8 +1498,21 @@ namespace BlendShapeEditor
 				{
 					Vector3 mirrorWorld = _mirrorPlane.ReflectPoint(brushResult.HitPoint);
 					Vector3 mirrorWorldNormal = _mirrorPlane.ReflectVector(brushResult.HitNormal);
-					Vector3 mirrorSpace = _session.Space.InverseTransformPoint(mirrorWorld);
-					mirrorResult = _session.BrushSelectAtPoint(mirrorSpace, mirrorWorld, mirrorWorldNormal);
+					if (projectedBrush)
+					{
+						Ray mirrorRay = new Ray(_mirrorPlane.ReflectPoint(_moveGrabRay.origin), _mirrorPlane.ReflectVector(_moveGrabRay.direction));
+						mirrorResult = _session.BrushSelectProjected(mirrorRay);
+						if (mirrorResult != null)
+						{
+							mirrorResult.HitPoint = mirrorWorld;
+							mirrorResult.HitNormal = mirrorWorldNormal;
+						}
+					}
+					else
+					{
+						Vector3 mirrorSpace = _session.Space.InverseTransformPoint(mirrorWorld);
+						mirrorResult = _session.BrushSelectAtPoint(mirrorSpace, mirrorWorld, mirrorWorldNormal);
+					}
 					if (activeTool is MoveTool && mirrorResult != null && _moveGrabMirrorResult == null)
 						_moveGrabMirrorResult = mirrorResult;
 				}
@@ -1505,12 +1524,12 @@ namespace BlendShapeEditor
 						if (_brushBeforeSnapshot != null && !_brushBeforeSnapshot.ContainsKey(pair.Key))
 							_brushBeforeSnapshot[pair.Key] = deltas[pair.Key];
 					}
-					MoveTool mirrorMoveTool = activeTool as MoveTool;
-					if (mirrorMoveTool != null)
-						mirrorMoveTool.Mirror = _mirrorPlane;
+					IMirrorAware mirrorAware = activeTool as IMirrorAware;
+					if (mirrorAware != null)
+						mirrorAware.Mirror = _mirrorPlane;
 					ApplyToolToSurface(activeTool, activeLayer, mirrorResult, cachedNormals, cam);
-					if (mirrorMoveTool != null)
-						mirrorMoveTool.Mirror = null;
+					if (mirrorAware != null)
+						mirrorAware.Mirror = null;
 					_brushMirrorAffectedVertices = mirrorResult.AffectedVertices;
 				}
 				else
@@ -1878,6 +1897,7 @@ namespace BlendShapeEditor
 			switch (Window.SelectedBrushTool)
 			{
 				case ShapeEditorWindow.BrushToolType.Move:       return _moveTool;
+				case ShapeEditorWindow.BrushToolType.Move2D:     return _move2DTool;
 				case ShapeEditorWindow.BrushToolType.Smooth:     return _smoothTool;
 				case ShapeEditorWindow.BrushToolType.Inflate:    return _inflateTool;
 				case ShapeEditorWindow.BrushToolType.Draw:       return _drawTool;
@@ -1907,7 +1927,7 @@ namespace BlendShapeEditor
 			if (!Window.IsEditMode)
 				return;
 			bool hasWire = _wireVerts != null && _wireTris != null;
-			if (!hasWire && !_hasHit) return;
+			if (!hasWire && !_hasProjectedHit) return;
 			if (hasWire) DrawWireframe();
 			if (Window.ActiveDeformData == null || Window.ActiveDeformData.Layers.IsNullOrEmpty()) return;
 			_cursorMaterial.SetPass(0);
@@ -1918,8 +1938,20 @@ namespace BlendShapeEditor
 			bool configuringMirror = Window.MirrorConfiguring;
 			if (Window.OperationMode == ShapeEditorWindow.OpMode.Brush && !configuringMirror)
 			{
-				if (_hasHit)
+				if (Window.SelectedBrushTool == ShapeEditorWindow.BrushToolType.Move2D)
+				{
+					if (_hasProjectedHit && _session != null && _session.Space)
+					{
+						Ray cursorRay = _camera.ScreenPointToRay(InputHelper.MousePosition);
+						float cursorDepth = Mathf.Max(0.1f, Vector3.Dot(_session.Space.TransformPoint(_meshBoundsLocal.center) - cursorRay.origin, cursorRay.direction));
+						Vector3 cursorCenter = _hasHit ? _lastHitPoint : cursorRay.origin + cursorRay.direction * cursorDepth;
+						DrawBrushCircle(cursorCenter, -_camera.transform.forward, Window.BrushRadius);
+					}
+				}
+				else if (_hasHit)
+				{
 					DrawBrushCircle(_lastHitPoint, _lastHitNormal, Window.BrushRadius);
+				}
 			}
 			if (_isBoxSelecting)
 				DrawBoxSelectRect();
@@ -1977,6 +2009,7 @@ namespace BlendShapeEditor
 			switch (Window.SelectedBrushTool)
 			{
 				case ShapeEditorWindow.BrushToolType.Move:       col = BSE.BrushColorMove.Value; break;
+				case ShapeEditorWindow.BrushToolType.Move2D:     col = BSE.BrushColorMove.Value; break;
 				case ShapeEditorWindow.BrushToolType.Smooth:     col = BSE.BrushColorSmooth.Value; break;
 				case ShapeEditorWindow.BrushToolType.Inflate:    col = BSE.BrushColorInflate.Value; break;
 				// Can't be fucked to add colors for these
@@ -2634,6 +2667,9 @@ namespace BlendShapeEditor
 
 		private Camera _camera;
 		private MoveTool _moveTool;
+		private MoveTool _move2DTool;
+		private Ray _moveGrabRay;
+		private bool _hasProjectedHit;
 		private SmoothTool _smoothTool;
 		private InflateTool _inflateTool;
 		private DrawTool _drawTool;

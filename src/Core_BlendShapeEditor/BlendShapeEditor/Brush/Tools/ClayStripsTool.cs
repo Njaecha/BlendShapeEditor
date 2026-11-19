@@ -3,13 +3,14 @@ using UnityEngine;
 
 namespace BlendShapeEditor
 {
-    public class ClayStripsTool : IDeformTool
+    public class ClayStripsTool : IDeformTool, IMirrorAware
     {
         public float Direction { get; set; } = 1f;
         public Vector3 StrokePlaneOrigin { get; set; }
         public Vector3 StrokePlaneNormal { get; set; }
         public Vector3 StrokeDirection { get; set; }
         public bool StrokeStarted { get; set; }
+        public MirrorPlane Mirror { get; set; }
         public float StripWidth { get; set; } = 1f;
 
         public void Apply(DeformSurface surface, BrushResult brushResult, Camera camera,
@@ -25,6 +26,12 @@ namespace BlendShapeEditor
             Vector3 planeOrigin = StrokeStarted ? StrokePlaneOrigin : brushResult.HitPoint;
             Vector3 planeNormal = StrokeStarted ? StrokePlaneNormal : brushResult.HitNormal.normalized;
             Vector3 strokeDir = StrokeDirection.normalized;
+            if (Mirror != null && StrokeStarted)
+            {
+                planeOrigin = Mirror.ReflectPoint(planeOrigin);
+                planeNormal = Mirror.ReflectVector(planeNormal);
+                strokeDir = Mirror.ReflectVector(strokeDir);
+            }
             if (strokeDir.sqrMagnitude < 0.001f)
                 strokeDir = planeNormal;
 

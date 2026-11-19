@@ -3,12 +3,13 @@ using UnityEngine;
 
 namespace BlendShapeEditor
 {
-    public class FlattenTool : IDeformTool
+    public class FlattenTool : IDeformTool, IMirrorAware
     {
         public float Direction { get; set; } = 1f;
         public Vector3 AveragePlaneOrigin { get; set; }
         public Vector3 AveragePlaneNormal { get; set; }
         public bool PlaneComputed { get; set; }
+        public MirrorPlane Mirror { get; set; }
 
         public void Apply(DeformSurface surface, BrushResult brushResult, Camera camera,
             Dictionary<int, Vector3> displacements)
@@ -20,6 +21,7 @@ namespace BlendShapeEditor
             if (Mathf.Approximately(dir, 0f))
                 return;
 
+            bool planeFromOtherSide = PlaneComputed;
             if (!PlaneComputed)
             {
                 Vector3 avgPos = Vector3.zero;
@@ -46,6 +48,11 @@ namespace BlendShapeEditor
 
             Vector3 planeOrigin = AveragePlaneOrigin;
             Vector3 planeNormal = AveragePlaneNormal;
+            if (Mirror != null && planeFromOtherSide)
+            {
+                planeOrigin = Mirror.ReflectPoint(planeOrigin);
+                planeNormal = Mirror.ReflectVector(planeNormal);
+            }
 
             foreach (var vertex in brushResult.AffectedVertices)
             {
