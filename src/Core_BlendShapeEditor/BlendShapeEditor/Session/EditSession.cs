@@ -176,6 +176,81 @@ namespace BlendShapeEditor
 			};
 		}
 
+		public BrushResult BrushSelectProjected(Ray worldRay)
+		{
+			if (_grid == null || _positions == null || !Space)
+				return null;
+
+			Vector3 origin = Space.InverseTransformPoint(worldRay.origin);
+			Vector3 dir = Space.InverseTransformDirection(worldRay.direction).normalized;
+			float localRadius = Space.InverseTransformVector(new Vector3(Radius, 0, 0)).magnitude;
+			float radiusSq = localRadius * localRadius;
+			float strength = Strength;
+			var affected = new Dictionary<int, float>();
+			float alongSum = 0f;
+			float depthSum = 0f;
+			float weightSum = 0f;
+			for (int i = 0; i < _positions.Length; i++)
+			{
+				Vector3 toVertex = _positions[i] - origin;
+				float along = Vector3.Dot(toVertex, dir);
+				if (along <= 0f)
+					continue;
+				float distSq = (toVertex - dir * along).sqrMagnitude;
+				if (distSq > radiusSq)
+					continue;
+				float falloff = CalculateFalloff(Mathf.Sqrt(distSq) / localRadius);
+				affected[i] = falloff * strength;
+				alongSum += along;
+				depthSum += along * falloff;
+				weightSum += falloff;
+			}
+			if (affected.Count == 0)
+				return null;
+
+			Vector3 hitPoint;
+			Vector3 hitNormal;
+			if (RaycastNearest(worldRay, out RaycastHit hit))
+			{
+				hitPoint = hit.point;
+				hitNormal = hit.normal;
+			}
+			else
+			{
+				float depth = weightSum > 0.0001f ? depthSum / weightSum : alongSum / affected.Count;
+				hitPoint = Space.TransformPoint(origin + dir * depth);
+				hitNormal = -worldRay.direction.normalized;
+			}
+
+			return new BrushResult
+			{
+				HitPoint = hitPoint,
+				HitNormal = hitNormal,
+				AffectedVertices = affected
+			};
+		}
+
+		public bool AnyVertexInProjectedRadius(Ray worldRay)
+		{
+			if (_grid == null || _positions == null || !Space)
+				return false;
+
+			Vector3 origin = Space.InverseTransformPoint(worldRay.origin);
+			Vector3 dir = Space.InverseTransformDirection(worldRay.direction).normalized;
+			float localRadius = Space.InverseTransformVector(new Vector3(Radius, 0, 0)).magnitude;
+			float radiusSq = localRadius * localRadius;
+			for (int i = 0; i < _positions.Length; i++)
+			{
+				Vector3 toVertex = _positions[i] - origin;
+				float along = Vector3.Dot(toVertex, dir);
+				if (along <= 0f)
+					continue;
+				if ((toVertex - dir * along).sqrMagnitude <= radiusSq)
+					return true;
+			}
+			return false;
+		}
+
 		public void SelectBox(Camera cam, Rect screenRect, bool additive, bool[] vertexVisible = null)
 		{
 			if (_positions == null || !Space)
