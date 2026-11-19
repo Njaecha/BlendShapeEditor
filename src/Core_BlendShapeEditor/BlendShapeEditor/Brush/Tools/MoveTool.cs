@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace BlendShapeEditor
 {
-	public class MoveTool : IDeformTool
+	public class MoveTool : IDeformTool, IMirrorAware
 	{
 		public float Direction { get; set; }
 		public Vector2 MouseDelta { get; set; }
@@ -35,7 +35,7 @@ namespace BlendShapeEditor
 				moveDir = brushResult.HitNormal.normalized * dragDelta;
 			}
 
-			if (Mirror != null)
+			if (Mirror != null && UseViewPlane && camera)
 				moveDir = Mirror.ReflectVector(moveDir);
 
 			foreach (KeyValuePair<int, float> pair in brushResult.AffectedVertices)
