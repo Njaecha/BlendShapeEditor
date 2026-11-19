@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace BlendShapeEditor
 {
-    public class ClayThumbTool : IDeformTool
+    public class ClayThumbTool : IDeformTool, IMirrorAware
     {
         public float Direction { get; set; } = 1f;
         public Vector3 StrokePlaneOrigin { get; set; }
@@ -11,6 +11,7 @@ namespace BlendShapeEditor
         public Vector3 StrokeDirection { get; set; }
         public bool StrokeStarted { get; set; }
         public Vector2 MouseDelta { get; set; }
+        public MirrorPlane Mirror { get; set; }
         public void Apply(DeformSurface surface, BrushResult brushResult, Camera camera, Dictionary<int, Vector3> displacements)
         {
             if (surface == null || brushResult == null)
@@ -21,9 +22,17 @@ namespace BlendShapeEditor
                 return;
 
             Vector3 planeNormal = StrokeStarted ? StrokePlaneNormal : brushResult.HitNormal.normalized;
+            Vector3 strokeOrigin = StrokeStarted ? StrokePlaneOrigin : brushResult.HitPoint;
+            Vector3 strokeDirection = StrokeDirection.normalized;
+            if (Mirror != null && StrokeStarted)
+            {
+                planeNormal = Mirror.ReflectVector(planeNormal);
+                strokeOrigin = Mirror.ReflectPoint(strokeOrigin);
+                strokeDirection = Mirror.ReflectVector(strokeDirection);
+            }
             float targetOffset = 0.0005f * dir;
 
-            Vector3 pullDir = StrokeDirection.normalized;
+            Vector3 pullDir = strokeDirection;
             pullDir = (pullDir - Vector3.Dot(pullDir, planeNormal) * planeNormal).normalized;
             if (pullDir.sqrMagnitude < 0.001f)
                 pullDir = Vector3.zero;
@@ -36,7 +45,7 @@ namespace BlendShapeEditor
                     continue;
 
                 Vector3 currentPos = surface.GetPosition(vertexIndex);
-                Vector3 planeOrigin = StrokeStarted ? StrokePlaneOrigin : brushResult.HitPoint;
+                Vector3 planeOrigin = strokeOrigin;
                 float signedDist = Vector3.Dot(currentPos - planeOrigin, planeNormal);
                 float desiredDist = targetOffset;
 
